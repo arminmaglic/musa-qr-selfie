@@ -79,16 +79,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 2. Draw Frame
         // Calculate frame dimensions based on video size, mimicking CSS
-        // CSS: top 20px, left 20px, right 20px, bottom 140px (approx relative to viewport)
-        // We'll use proportional padding
-        const paddingX = canvas.width * 0.05; // 5%
-        const paddingTop = canvas.height * 0.03; // 3%
-        const paddingBottom = canvas.height * 0.2; // 20% space at bottom
+        const isLandscape = canvas.width > canvas.height;
 
-        const frameX = paddingX;
-        const frameY = paddingTop;
-        const frameW = canvas.width - (paddingX * 2);
-        const frameH = canvas.height - paddingTop - paddingBottom;
+        let paddingX, paddingTop, paddingBottom;
+
+        if (isLandscape) {
+            // Landscape: Controls on right
+            paddingX = canvas.width * 0.03; // 3% left
+            const paddingRight = canvas.width * 0.15; // 15% right for controls
+            paddingTop = canvas.height * 0.05;
+            paddingBottom = canvas.height * 0.05;
+
+            var frameX = paddingX;
+            var frameY = paddingTop;
+            var frameW = canvas.width - paddingX - paddingRight;
+            var frameH = canvas.height - paddingTop - paddingBottom;
+        } else {
+            // Portrait: Controls on bottom
+            paddingX = canvas.width * 0.05; // 5%
+            paddingTop = canvas.height * 0.03; // 3%
+            paddingBottom = canvas.height * 0.2; // 20% space at bottom
+
+            var frameX = paddingX;
+            var frameY = paddingTop;
+            var frameW = canvas.width - (paddingX * 2);
+            var frameH = canvas.height - paddingTop - paddingBottom;
+        }
 
         ctx.strokeStyle = '#d4af37'; // Gold
         ctx.lineWidth = canvas.width * 0.01; // Responsive border width

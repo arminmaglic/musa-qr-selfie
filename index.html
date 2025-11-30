@@ -1,18 +1,36 @@
 <!DOCTYPE html>
 <html lang="bs">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Musa Ćazim Ćatić - Selfie</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div id="app">
         <!-- Camera Feed -->
         <video id="camera" autoplay playsinline muted></video>
-        
+
         <!-- Decorative Frame Overlay -->
-        <div id="frame-overlay"></div>
+        <div id="frame-overlay">
+            <!-- Corners -->
+            <img src="elements/corner.svg" class="frame-corner corner-top-left" alt="">
+            <img src="elements/corner.svg" class="frame-corner corner-top-right" alt="">
+            <img src="elements/corner.svg" class="frame-corner corner-bottom-left" alt="">
+            <img src="elements/corner.svg" class="frame-corner corner-bottom-right" alt="">
+
+            <!-- Lines connecting corners using CSS -->
+            <div class="frame-line line-top"></div>
+            <div class="frame-line line-bottom"></div>
+            <div class="frame-line line-left"></div>
+            <div class="frame-line line-right"></div>
+
+            <!-- Decorative elements -->
+            <img src="elements/pero.svg" class="frame-decoration decoration-pero" alt="">
+            <img src="elements/knjiga.svg" class="frame-decoration decoration-knjiga" alt="">
+        </div>
 
         <!-- Verse Display -->
         <div id="verse-container">
@@ -31,4 +49,5 @@
 
     <script src="app.js"></script>
 </body>
+
 </html>

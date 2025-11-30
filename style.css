@@ -47,42 +47,116 @@ body {
     left: 20px;
     right: 20px;
     bottom: 140px;
-    /* Space for controls */
-    border: 2px solid var(--primary-color);
     pointer-events: none;
     z-index: 2;
-    box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
 }
 
-/* Corner decorations for the frame */
-#frame-overlay::before,
-#frame-overlay::after {
-    content: '';
+/* Frame corners */
+.frame-corner {
     position: absolute;
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--primary-color);
-    transition: all 0.3s ease;
+    width: 60px;
+    height: 60px;
+    filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.8));
 }
 
-#frame-overlay::before {
-    top: -2px;
-    left: -2px;
-    border-right: none;
-    border-bottom: none;
+.corner-top-left {
+    top: -10px;
+    left: -10px;
 }
 
-#frame-overlay::after {
-    bottom: -2px;
-    right: -2px;
-    border-left: none;
-    border-top: none;
+.corner-top-right {
+    top: -10px;
+    right: -10px;
+    transform: rotate(90deg);
+}
+
+.corner-bottom-left {
+    bottom: -10px;
+    left: -10px;
+    transform: rotate(-90deg);
+}
+
+.corner-bottom-right {
+    bottom: -10px;
+    right: -10px;
+    transform: rotate(180deg);
+}
+
+/* Frame lines - CSS-based elegant borders */
+.frame-line {
+    position: absolute;
+    filter: drop-shadow(1px 1px 3px rgba(0, 0, 0, 0.8));
+}
+
+.line-top {
+    top: 0;
+    left: 50px;
+    right: 50px;
+    height: 3px;
+    background: linear-gradient(90deg,
+            transparent 0%,
+            #573705 2%,
+            #573705 98%,
+            transparent 100%);
+}
+
+.line-bottom {
+    bottom: 0;
+    left: 50px;
+    right: 50px;
+    height: 3px;
+    background: linear-gradient(90deg,
+            transparent 0%,
+            #573705 2%,
+            #573705 98%,
+            transparent 100%);
+}
+
+.line-left {
+    left: 0;
+    top: 50px;
+    bottom: 50px;
+    width: 3px;
+    background: linear-gradient(180deg,
+            transparent 0%,
+            #573705 2%,
+            #573705 98%,
+            transparent 100%);
+}
+
+.line-right {
+    right: 0;
+    top: 50px;
+    bottom: 50px;
+    width: 3px;
+    background: linear-gradient(180deg,
+            transparent 0%,
+            #573705 2%,
+            #573705 98%,
+            transparent 100%);
+}
+
+/* Frame decorations */
+.frame-decoration {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    filter: drop-shadow(2px 2px 4px rgba(0, 0, 0, 0.8));
+}
+
+.decoration-pero {
+    bottom: 10px;
+    left: 10px;
+}
+
+.decoration-knjiga {
+    bottom: 10px;
+    right: 10px;
 }
 
 #verse-container {
     position: absolute;
     bottom: 160px;
-    /* Above controls */
     width: 90%;
     text-align: center;
     z-index: 3;
@@ -129,184 +203,50 @@ body {
 .icon-btn {
     background: none;
     border: none;
+    color: #fff;
+    font-size: 2rem;
+    cursor: pointer;
+    opacity: 0.8;
+}
 
-    :root {
-        --primary-color: #d4af37;
-        /* Gold */
-        --text-color: #ffffff;
-        --bg-color: #000000;
-    }
+.icon-btn:active {
+    opacity: 1;
+}
 
-    * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-    }
-
-    body {
-        background-color: var(--bg-color);
-        color: var(--text-color);
-        font-family: 'Georgia', serif;
-        overflow: hidden;
-        height: 100vh;
-        width: 100vw;
-    }
-
+/* Landscape Optimization */
+@media (orientation: landscape) {
     #app {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-end;
-        align-items: center;
+        flex-direction: row;
     }
 
     #camera {
-        position: absolute;
-        top: 0;
-        left: 0;
         width: 100%;
         height: 100%;
-        object-fit: cover;
-        z-index: 1;
-        transform: scaleX(-1);
     }
 
     #frame-overlay {
-        position: absolute;
         top: 20px;
         left: 20px;
-        right: 20px;
-        bottom: 140px;
-        /* Space for controls */
-        border: 2px solid var(--primary-color);
-        pointer-events: none;
-        z-index: 2;
-        box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
-    }
-
-    /* Corner decorations for the frame */
-    #frame-overlay::before,
-    #frame-overlay::after {
-        content: '';
-        position: absolute;
-        width: 20px;
-        height: 20px;
-        border: 2px solid var(--primary-color);
-        transition: all 0.3s ease;
-    }
-
-    #frame-overlay::before {
-        top: -2px;
-        left: -2px;
-        border-right: none;
-        border-bottom: none;
-    }
-
-    #frame-overlay::after {
-        bottom: -2px;
-        right: -2px;
-        border-left: none;
-        border-top: none;
+        right: 140px;
+        bottom: 20px;
     }
 
     #verse-container {
-        position: absolute;
-        bottom: 160px;
-        /* Above controls */
-        width: 90%;
-        text-align: center;
-        z-index: 3;
-        text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8);
-        background: rgba(0, 0, 0, 0.3);
-        padding: 10px;
-        border-radius: 8px;
-    }
-
-    #verse-text {
-        font-size: 1.2rem;
-        font-style: italic;
-        line-height: 1.4;
+        bottom: 40px;
+        left: 40px;
+        right: 160px;
+        width: auto;
     }
 
     #controls {
-        position: relative;
-        z-index: 10;
-        width: 100%;
-        height: 120px;
-        background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 30px;
-        padding-bottom: 20px;
+        width: 120px;
+        height: 100%;
+        flex-direction: column;
+        background: linear-gradient(to left, rgba(0, 0, 0, 0.8), transparent);
+        padding-bottom: 0;
+        padding-right: 20px;
+        position: absolute;
+        right: 0;
+        top: 0;
     }
-
-    .capture-btn {
-        width: 70px;
-        height: 70px;
-        border-radius: 50%;
-        background-color: rgba(255, 255, 255, 0.2);
-        border: 4px solid #fff;
-        cursor: pointer;
-        transition: transform 0.1s;
-    }
-
-    .capture-btn:active {
-        transform: scale(0.95);
-        background-color: rgba(255, 255, 255, 0.5);
-    }
-
-    .icon-btn {
-        background: none;
-        border: none;
-        color: #fff;
-        font-size: 2rem;
-        cursor: pointer;
-        opacity: 0.8;
-    }
-
-    .icon-btn:active {
-        opacity: 1;
-    }
-
-    /* Landscape Optimization */
-    @media (orientation: landscape) {
-        #app {
-            flex-direction: row;
-        }
-
-        #camera {
-            width: 100%;
-            height: 100%;
-        }
-
-        #frame-overlay {
-            top: 20px;
-            left: 20px;
-            right: 140px;
-            /* Space for controls on right */
-            bottom: 20px;
-        }
-
-        #verse-container {
-            bottom: 40px;
-            left: 40px;
-            right: 160px;
-            /* Avoid controls */
-            width: auto;
-        }
-
-        #controls {
-            width: 120px;
-            height: 100%;
-            flex-direction: column;
-            background: linear-gradient(to left, rgba(0, 0, 0, 0.8), transparent);
-            padding-bottom: 0;
-            padding-right: 20px;
-            position: absolute;
-            right: 0;
-            top: 0;
-        }
-    }
+}

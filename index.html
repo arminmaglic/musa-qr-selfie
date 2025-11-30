@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Musa Ćazim Ćatić - Selfie</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Camera Feed -->
+        <video id="camera" autoplay playsinline muted></video>
+        
+        <!-- Decorative Frame Overlay -->
+        <div id="frame-overlay"></div>
+
+        <!-- Verse Display -->
+        <div id="verse-container">
+            <p id="verse-text">Učitavanje stihova...</p>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls">
+            <button id="btn-change-verse" class="icon-btn">↻</button>
+            <button id="btn-capture" class="capture-btn"></button>
+        </div>
+
+        <!-- Hidden Canvas for Processing -->
+        <canvas id="canvas" style="display: none;"></canvas>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

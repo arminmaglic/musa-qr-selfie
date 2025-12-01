@@ -11,6 +11,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize
     init();
 
+    // Fullscreen logic
+    function requestFullScreen() {
+        const doc = window.document;
+        const docEl = doc.documentElement;
+
+        const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+
+        if (requestFullScreen) {
+            requestFullScreen.call(docEl).catch(err => {
+                console.log("Error attempting to enable full-screen mode:", err.message);
+            });
+        }
+    }
+
+    // Try to go fullscreen on first interaction
+    document.addEventListener('click', function initAudio() {
+        requestFullScreen();
+        document.removeEventListener('click', initAudio);
+    }, { once: true });
+
+    document.addEventListener('touchstart', function initTouch() {
+        requestFullScreen();
+        document.removeEventListener('touchstart', initTouch);
+    }, { once: true });
+
     async function init() {
         try {
             await startCamera();

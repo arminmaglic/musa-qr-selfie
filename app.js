@@ -36,6 +36,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('touchstart', initTouch);
     }, { once: true });
 
+    // Load assets
+    const cornerImg = new Image();
+    cornerImg.src = 'elements/corner.svg';
+    const peroImg = new Image();
+    peroImg.src = 'elements/pero.svg';
+    const knjigaImg = new Image();
+    knjigaImg.src = 'elements/knjiga.svg';
+
     async function init() {
         try {
             await startCamera();
@@ -110,10 +118,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (isLandscape) {
             // Landscape: Controls on right
-            paddingX = canvas.width * 0.03; // 3% left
-            const paddingRight = canvas.width * 0.15; // 15% right for controls
-            paddingTop = canvas.height * 0.05;
-            paddingBottom = canvas.height * 0.05;
+            paddingX = 20; // 20px left
+            const paddingRight = 140; // 140px right for controls
+            paddingTop = 20;
+            paddingBottom = 20;
 
             var frameX = paddingX;
             var frameY = paddingTop;
@@ -121,9 +129,9 @@ document.addEventListener('DOMContentLoaded', () => {
             var frameH = canvas.height - paddingTop - paddingBottom;
         } else {
             // Portrait: Controls on bottom
-            paddingX = canvas.width * 0.05; // 5%
-            paddingTop = canvas.height * 0.03; // 3%
-            paddingBottom = canvas.height * 0.2; // 20% space at bottom
+            paddingX = 20;
+            paddingTop = 20;
+            paddingBottom = 140; // 140px space at bottom
 
             var frameX = paddingX;
             var frameY = paddingTop;
@@ -131,27 +139,60 @@ document.addEventListener('DOMContentLoaded', () => {
             var frameH = canvas.height - paddingTop - paddingBottom;
         }
 
-        ctx.strokeStyle = '#d4af37'; // Gold
-        ctx.lineWidth = canvas.width * 0.01; // Responsive border width
-        ctx.strokeRect(frameX, frameY, frameW, frameH);
+        // Draw Lines (Brown #573705)
+        ctx.fillStyle = '#573705';
+        const lineWidth = 3;
+        const lineOffset = 50; // 50px offset from corners
 
-        // Draw Corners (Decorative)
-        const cornerSize = canvas.width * 0.08;
-        ctx.beginPath();
-        // Top-Left
-        ctx.moveTo(frameX + cornerSize, frameY - 2);
-        ctx.lineTo(frameX - 2, frameY - 2);
-        ctx.lineTo(frameX - 2, frameY + cornerSize);
-        // Bottom-Right
-        ctx.moveTo(frameX + frameW - cornerSize, frameY + frameH + 2);
-        ctx.lineTo(frameX + frameW + 2, frameY + frameH + 2);
-        ctx.lineTo(frameX + frameW + 2, frameY + frameH - cornerSize);
-        ctx.stroke();
+        // Top Line
+        ctx.fillRect(frameX + lineOffset, frameY, frameW - (lineOffset * 2), lineWidth);
+        // Bottom Line
+        ctx.fillRect(frameX + lineOffset, frameY + frameH - lineWidth, frameW - (lineOffset * 2), lineWidth);
+        // Left Line
+        ctx.fillRect(frameX, frameY + lineOffset, lineWidth, frameH - (lineOffset * 2));
+        // Right Line
+        ctx.fillRect(frameX + frameW - lineWidth, frameY + lineOffset, lineWidth, frameH - (lineOffset * 2));
+
+        // Draw Corners
+        const cornerSize = 60;
+        const cornerOffset = 10; // -10px in CSS
+
+        // Helper to draw rotated image
+        function drawRotatedImage(img, x, y, angle) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle * Math.PI / 180);
+            ctx.drawImage(img, 0, 0, cornerSize, cornerSize);
+            ctx.restore();
+        }
+
+        // Top-Left (0 deg)
+        ctx.drawImage(cornerImg, frameX - cornerOffset, frameY - cornerOffset, cornerSize, cornerSize);
+
+        // Top-Right (90 deg)
+        drawRotatedImage(cornerImg, frameX + frameW + cornerOffset, frameY - cornerOffset, 90);
+
+        // Bottom-Left (-90 deg)
+        drawRotatedImage(cornerImg, frameX - cornerOffset, frameY + frameH + cornerOffset, -90);
+
+        // Bottom-Right (180 deg)
+        drawRotatedImage(cornerImg, frameX + frameW + cornerOffset, frameY + frameH + cornerOffset, 180);
+
+        // Draw Decorations
+        const decoSize = 50;
+        const decoOffset = 10;
+
+        // Pero (Bottom-Left)
+        ctx.drawImage(peroImg, frameX + decoOffset, frameY + frameH - decoSize - decoOffset, decoSize, decoSize);
+
+        // Knjiga (Bottom-Right)
+        ctx.drawImage(knjigaImg, frameX + frameW - decoSize - decoOffset, frameY + frameH - decoSize - decoOffset, decoSize, decoSize);
+
 
         // 3. Draw Verse
         const verse = verses[currentVerseIndex];
         if (verse) {
-            const fontSize = canvas.width * 0.05;
+            const fontSize = Math.max(24, canvas.width * 0.04); // Responsive font size
             ctx.font = `italic ${fontSize}px Georgia`;
             ctx.fillStyle = 'white';
             ctx.textAlign = 'center';
@@ -165,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Wrap text
             const textX = canvas.width / 2;
-            const textY = frameY + frameH + (paddingBottom / 2);
+            const textY = frameY + frameH + (paddingBottom / 2); // Center in the bottom padding area
             const maxWidth = canvas.width * 0.9;
 
             wrapText(ctx, `"${verse}"`, textX, textY, maxWidth, fontSize * 1.2);

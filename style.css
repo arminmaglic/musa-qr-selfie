@@ -1,4 +1,4 @@
-: root {
+:root {
     --primary-color: #d4af37;
     /* Gold */
     --text-color: #ffffff;
@@ -54,12 +54,13 @@ body {
 /* Beige overlay outside the frame */
 #frame-overlay::before {
     content: '';
-    position: fixed;
+    position: absolute;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
     box-shadow: 0 0 0 9999px #e5be7e;
+    z-index: -1;
     pointer-events: none;
 }
 

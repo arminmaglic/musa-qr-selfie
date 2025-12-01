@@ -1,0 +1,3 @@
+# Ignore specific files from being tracked by Git
+info.md
+template-example.jpg

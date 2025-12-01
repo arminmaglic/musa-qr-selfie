@@ -12,7 +12,7 @@
 }
 
 body {
-    background-color: var(--bg-color);
+    background-color: #e5be7e;
     color: var(--text-color);
     font-family: 'Georgia', serif;
     overflow: hidden;
@@ -49,6 +49,18 @@ body {
     bottom: 140px;
     pointer-events: none;
     z-index: 2;
+}
+
+/* Beige overlay outside the frame */
+#frame-overlay::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    box-shadow: 0 0 0 9999px #e5be7e;
+    pointer-events: none;
 }
 
 /* Frame corners */
@@ -177,7 +189,7 @@ body {
     z-index: 10;
     width: 100%;
     height: 120px;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+    background: linear-gradient(to top, #e5be7e, transparent);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -242,7 +254,7 @@ body {
         width: 120px;
         height: 100%;
         flex-direction: column;
-        background: linear-gradient(to left, rgba(0, 0, 0, 0.8), transparent);
+        background: linear-gradient(to left, #e5be7e, transparent);
         padding-bottom: 0;
         padding-right: 20px;
         position: absolute;

@@ -110,6 +110,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnCapture.addEventListener('click', takePhoto);
 
+    function computeCaptureLayoutFromDom(canvas) {
+        const frameOverlay = document.getElementById('frame-overlay');
+        const heading = document.getElementById('app-heading');
+        const verseContainer = document.getElementById('verse-container');
+
+        if (!frameOverlay) return null;
+
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 1;
+        const scaleX = canvas.width / viewportWidth;
+        const scaleY = canvas.height / viewportHeight;
+
+        const mapRect = (rect) => ({
+            x: rect.left * scaleX,
+            y: rect.top * scaleY,
+            width: rect.width * scaleX,
+            height: rect.height * scaleY
+        });
+
+        const getRect = (selector) => {
+            const el = typeof selector === 'string' ? frameOverlay.querySelector(selector) : selector;
+            if (!el) return null;
+            return mapRect(el.getBoundingClientRect());
+        };
+
+        const corners = {
+            topLeft: getRect('.corner-top-left'),
+            topRight: getRect('.corner-top-right'),
+            bottomLeft: getRect('.corner-bottom-left'),
+            bottomRight: getRect('.corner-bottom-right')
+        };
+
+        return {
+            frame: mapRect(frameOverlay.getBoundingClientRect()),
+            heading: heading ? mapRect(heading.getBoundingClientRect()) : null,
+            headingText: heading ? heading.innerText : 'Spomen soba Musa Ćazim Ćatić Tešanj',
+            verse: verseContainer ? mapRect(verseContainer.getBoundingClientRect()) : null,
+            lines: {
+                top: getRect('.line-top'),
+                bottom: getRect('.line-bottom'),
+                left: getRect('.line-left'),
+                right: getRect('.line-right')
+            },
+            corners: {
+                topLeft: corners.topLeft ? { ...corners.topLeft, angle: 0 } : null,
+                topRight: corners.topRight ? { ...corners.topRight, angle: 90 } : null,
+                bottomLeft: corners.bottomLeft ? { ...corners.bottomLeft, angle: -90 } : null,
+                bottomRight: corners.bottomRight ? { ...corners.bottomRight, angle: 180 } : null
+            },
+            decorations: {
+                pero: getRect('.decoration-pero'),
+                knjiga: getRect('.decoration-knjiga')
+            }
+        };
+    }
+
     function takePhoto() {
         if (!video.videoWidth) return;
 
@@ -155,87 +211,49 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         ctx.restore();
 
-        // 2. Draw Frame
-        // Calculate frame dimensions based on video size, mimicking CSS
-        const isLandscape = canvas.width > canvas.height;
+        // 2. Draw Frame + Text using geometry captured from DOM/CSS.
+        const captureLayout = computeCaptureLayoutFromDom(canvas);
+        if (!captureLayout) return;
 
-        let paddingX, paddingTop, paddingBottom;
-
-        if (isLandscape) {
-            // Landscape: Controls on right
-            paddingX = 20; // 20px left
-            const paddingRight = 140; // 140px right for controls
-            paddingTop = 50; // Extra space for heading
-            paddingBottom = 20;
-
-            var frameX = paddingX;
-            var frameY = paddingTop;
-            var frameW = canvas.width - paddingX - paddingRight;
-            var frameH = canvas.height - paddingTop - paddingBottom;
-        } else {
-            // Portrait: Controls on bottom
-            paddingX = 20;
-            paddingTop = 70; // Extra space for heading
-            paddingBottom = 140; // 140px space at bottom
-
-            var frameX = paddingX;
-            var frameY = paddingTop;
-            var frameW = canvas.width - (paddingX * 2);
-            var frameH = canvas.height - paddingTop - paddingBottom;
-        }
+        const frameX = captureLayout.frame.x;
+        const frameY = captureLayout.frame.y;
+        const frameW = captureLayout.frame.width;
+        const frameH = captureLayout.frame.height;
 
         // Draw Lines (Brown #573705)
         ctx.fillStyle = '#573705';
-        const lineWidth = 3;
-        const lineOffset = 50; // 50px offset from corners
-
-        // Top Line
-        ctx.fillRect(frameX + lineOffset, frameY, frameW - (lineOffset * 2), lineWidth);
-        // Bottom Line
-        ctx.fillRect(frameX + lineOffset, frameY + frameH - lineWidth, frameW - (lineOffset * 2), lineWidth);
-        // Left Line
-        ctx.fillRect(frameX, frameY + lineOffset, lineWidth, frameH - (lineOffset * 2));
-        // Right Line
-        ctx.fillRect(frameX + frameW - lineWidth, frameY + lineOffset, lineWidth, frameH - (lineOffset * 2));
+        Object.values(captureLayout.lines).forEach((lineRect) => {
+            if (!lineRect) return;
+            ctx.fillRect(lineRect.x, lineRect.y, lineRect.width, lineRect.height);
+        });
 
         // Draw Corners
-        const cornerSize = 60;
-        const cornerOffset = 10; // -10px in CSS
+        Object.values(captureLayout.corners).forEach((cornerRect) => {
+            if (!cornerRect) return;
+            const centerX = cornerRect.x + cornerRect.width / 2;
+            const centerY = cornerRect.y + cornerRect.height / 2;
 
-        // Helper to draw rotated image
-        function drawRotatedImage(img, x, y, angle) {
             ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(angle * Math.PI / 180);
-            ctx.drawImage(img, 0, 0, cornerSize, cornerSize);
+            ctx.translate(centerX, centerY);
+            ctx.rotate((cornerRect.angle || 0) * Math.PI / 180);
+            ctx.drawImage(cornerImg, -cornerRect.width / 2, -cornerRect.height / 2, cornerRect.width, cornerRect.height);
             ctx.restore();
-        }
-
-        // Top-Left (0 deg)
-        ctx.drawImage(cornerImg, frameX - cornerOffset, frameY - cornerOffset, cornerSize, cornerSize);
-
-        // Top-Right (90 deg)
-        drawRotatedImage(cornerImg, frameX + frameW + cornerOffset, frameY - cornerOffset, 90);
-
-        // Bottom-Left (-90 deg)
-        drawRotatedImage(cornerImg, frameX - cornerOffset, frameY + frameH + cornerOffset, -90);
-
-        // Bottom-Right (180 deg)
-        drawRotatedImage(cornerImg, frameX + frameW + cornerOffset, frameY + frameH + cornerOffset, 180);
+        });
 
         // Draw Decorations
-        const decoSize = 50;
-        const decoOffset = 10;
-
-        // Pero (Bottom-Left)
-        ctx.drawImage(peroImg, frameX + decoOffset, frameY + frameH - decoSize - decoOffset, decoSize, decoSize);
-
-        // Knjiga (Bottom-Right)
-        ctx.drawImage(knjigaImg, frameX + frameW - decoSize - decoOffset, frameY + frameH - decoSize - decoOffset, decoSize, decoSize);
+        if (captureLayout.decorations.pero) {
+            const peroRect = captureLayout.decorations.pero;
+            ctx.drawImage(peroImg, peroRect.x, peroRect.y, peroRect.width, peroRect.height);
+        }
+        if (captureLayout.decorations.knjiga) {
+            const knjigaRect = captureLayout.decorations.knjiga;
+            ctx.drawImage(knjigaImg, knjigaRect.x, knjigaRect.y, knjigaRect.width, knjigaRect.height);
+        }
 
 
         // 3. Draw Heading
-        const headingFontSize = Math.max(18, canvas.width * 0.03);
+        const headingRect = captureLayout.heading;
+        const headingFontSize = headingRect ? Math.max(12, headingRect.height * 0.55) : Math.max(18, canvas.width * 0.03);
         ctx.font = `italic ${headingFontSize}px Georgia`;
         ctx.fillStyle = '#d4af37';
         ctx.textAlign = 'center';
@@ -246,7 +264,9 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
 
-        ctx.fillText('Spomen soba Musa Ćazim Ćatić Tešanj', canvas.width / 2, 15);
+        const headingX = headingRect ? headingRect.x + (headingRect.width / 2) : canvas.width / 2;
+        const headingY = headingRect ? headingRect.y : 15;
+        ctx.fillText(captureLayout.headingText, headingX, headingY);
 
 
         // 4. Draw Verse
@@ -265,9 +285,10 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.shadowOffsetY = 2;
 
             // Wrap text
-            const textX = canvas.width / 2;
-            const textY = frameY + frameH + (paddingBottom / 2); // Center in the bottom padding area
-            const maxWidth = canvas.width * 0.9;
+            const verseRect = captureLayout.verse;
+            const textX = verseRect ? verseRect.x + (verseRect.width / 2) : canvas.width / 2;
+            const textY = verseRect ? verseRect.y + (verseRect.height / 2) : frameY + frameH + 40;
+            const maxWidth = verseRect ? verseRect.width : canvas.width * 0.9;
 
             wrapText(ctx, `"${verse}"`, textX, textY, maxWidth, fontSize * 1.2);
         }

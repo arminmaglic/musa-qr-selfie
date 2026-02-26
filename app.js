@@ -234,8 +234,16 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.drawImage(knjigaImg, frameX + frameW - decoSize - decoOffset, frameY + frameH - decoSize - decoOffset, decoSize, decoSize);
 
 
+        const horizontalInset = Math.max(24, frameW * 0.08);
+        const topInset = Math.max(20, frameH * 0.08);
+        const bottomInset = Math.max(30, frameH * 0.1);
+        const textX = frameX + (frameW / 2);
+        const textMaxWidth = Math.max(120, frameW - (horizontalInset * 2));
+        const headingY = frameY + topInset;
+        const verseBottomY = frameY + frameH - bottomInset;
+
         // 3. Draw Heading
-        const headingFontSize = Math.max(18, canvas.width * 0.03);
+        const headingFontSize = Math.max(18, frameW * 0.03);
         ctx.font = `italic ${headingFontSize}px Georgia`;
         ctx.fillStyle = '#d4af37';
         ctx.textAlign = 'center';
@@ -246,17 +254,21 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
 
-        ctx.fillText('Spomen soba Musa Ćazim Ćatić Tešanj', canvas.width / 2, 15);
+        ctx.fillText('Spomen soba Musa Ćazim Ćatić Tešanj', textX, headingY);
 
 
         // 4. Draw Verse
         const verse = verses[currentVerseIndex];
         if (verse) {
-            const fontSize = Math.max(24, canvas.width * 0.04); // Responsive font size
+            const maxVerseFontSize = Math.max(22, frameW * 0.04);
+            const minVerseFontSize = 16;
+            let fontSize = maxVerseFontSize;
+            const maxLines = 4;
+
             ctx.font = `italic ${fontSize}px Georgia`;
             ctx.fillStyle = 'white';
             ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
+            ctx.textBaseline = 'top';
 
             // Text Shadow
             ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
@@ -264,12 +276,24 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.shadowOffsetX = 2;
             ctx.shadowOffsetY = 2;
 
-            // Wrap text
-            const textX = canvas.width / 2;
-            const textY = frameY + frameH + (paddingBottom / 2); // Center in the bottom padding area
-            const maxWidth = canvas.width * 0.9;
+            const verseTopLimit = headingY + headingFontSize + Math.max(20, frameH * 0.06);
+            const verseBottomLimit = verseBottomY;
+            const verseAreaHeight = Math.max(fontSize * 1.2, verseBottomLimit - verseTopLimit);
+            let lineHeight = fontSize * 1.2;
+            let wrapped = wrapText(ctx, `"${verse}"`, textMaxWidth, lineHeight, maxLines);
 
-            wrapText(ctx, `"${verse}"`, textX, textY, maxWidth, fontSize * 1.2);
+            while ((wrapped.truncated || (wrapped.lines.length * lineHeight) > verseAreaHeight) && fontSize > minVerseFontSize) {
+                fontSize -= 1;
+                lineHeight = fontSize * 1.2;
+                ctx.font = `italic ${fontSize}px Georgia`;
+                wrapped = wrapText(ctx, `"${verse}"`, textMaxWidth, lineHeight, maxLines);
+            }
+
+            const blockHeight = wrapped.lines.length * lineHeight;
+            const verseStartY = Math.max(verseTopLimit, verseBottomLimit - blockHeight);
+            for (let i = 0; i < wrapped.lines.length; i++) {
+                ctx.fillText(wrapped.lines[i], textX, verseStartY + (i * lineHeight));
+            }
         }
 
         // 5. Download
@@ -279,30 +303,36 @@ document.addEventListener('DOMContentLoaded', () => {
         link.click();
     }
 
-    function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    function wrapText(ctx, text, maxWidth, lineHeight, maxLines = Infinity) {
         const words = text.split(' ');
         let line = '';
         const lines = [];
+        let truncated = false;
 
         for (let n = 0; n < words.length; n++) {
             const testLine = line + words[n] + ' ';
             const metrics = ctx.measureText(testLine);
             const testWidth = metrics.width;
             if (testWidth > maxWidth && n > 0) {
-                lines.push(line);
+                lines.push(line.trim());
+                if (lines.length === maxLines) {
+                    truncated = true;
+                    break;
+                }
                 line = words[n] + ' ';
             } else {
                 line = testLine;
             }
         }
-        lines.push(line);
-
-        // Adjust Y to center the block of text
-        const totalHeight = lines.length * lineHeight;
-        let startY = y - (totalHeight / 2) + (lineHeight / 2);
-
-        for (let k = 0; k < lines.length; k++) {
-            ctx.fillText(lines[k], x, startY + (k * lineHeight));
+        if (!truncated && line.trim()) {
+            lines.push(line.trim());
         }
+
+        if (truncated && lines.length > 0) {
+            const lastLine = lines[lines.length - 1];
+            lines[lines.length - 1] = lastLine.endsWith('…') ? lastLine : `${lastLine}…`;
+        }
+
+        return { lines, lineHeight, truncated };
     }
 });

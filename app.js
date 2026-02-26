@@ -261,8 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 3. Draw Heading
         const headingRect = captureLayout.heading;
-        const headingFontSize = headingRect ? Math.max(12, headingRect.height * 0.55) : Math.max(18, canvas.width * 0.03);
-        const headingFontSize = Math.max(18, frameW * 0.03);
+        const headingFontSize = headingRect ? Math.max(12, headingRect.height * 0.55) : Math.max(18, frameW * 0.03);
         ctx.font = `italic ${headingFontSize}px Georgia`;
         ctx.fillStyle = '#d4af37';
         ctx.textAlign = 'center';
@@ -273,10 +272,8 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
 
-        const headingX = headingRect ? headingRect.x + (headingRect.width / 2) : canvas.width / 2;
-        const headingY = headingRect ? headingRect.y : 15;
+        const headingX = headingRect ? headingRect.x + (headingRect.width / 2) : textX;
         ctx.fillText(captureLayout.headingText, headingX, headingY);
-        ctx.fillText('Spomen soba Musa Ćazim Ćatić Tešanj', textX, headingY);
 
 
         // 4. Draw Verse
@@ -302,7 +299,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const verseRect = captureLayout.verse;
             const textX = verseRect ? verseRect.x + (verseRect.width / 2) : canvas.width / 2;
             const textY = verseRect ? verseRect.y + (verseRect.height / 2) : frameY + frameH + 40;
-            const maxWidth = verseRect ? verseRect.width : canvas.width * 0.9;
             const verseTopLimit = headingY + headingFontSize + Math.max(20, frameH * 0.06);
             const verseBottomLimit = verseBottomY;
             const verseAreaHeight = Math.max(fontSize * 1.2, verseBottomLimit - verseTopLimit);

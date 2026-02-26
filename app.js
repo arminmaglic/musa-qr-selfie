@@ -118,21 +118,41 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
 
-        // Detect actual screen orientation
+        // Detect actual screen orientation from viewport so capture logic tracks preview transform.
         const isScreenLandscape = window.innerWidth > window.innerHeight;
 
-        // 1. Draw Video (Mirrored and rotated if landscape)
+        // 1. Draw Video (kept in sync with updateCameraTransform)
         ctx.save();
         if (isScreenLandscape) {
-            // Landscape: rotate -90deg, translate, then mirror
-            ctx.translate(canvas.width, 0);
-            ctx.rotate(-90 * Math.PI / 180);
-            ctx.scale(-1, 1);
+            // Landscape preview is `scaleX(-1) rotate(-90deg)`. We render that sequence on an
+            // offscreen surface first, then fit it into the output canvas with positive coordinates.
+            const orientedCanvas = document.createElement('canvas');
+            orientedCanvas.width = video.videoHeight;
+            orientedCanvas.height = video.videoWidth;
+            const orientedCtx = orientedCanvas.getContext('2d');
+
+            orientedCtx.save();
+            orientedCtx.translate(orientedCanvas.width, 0);
+            // Coordinates now have origin at top-right; +x moves left, +y still moves down.
+            orientedCtx.scale(-1, 1);
+            // Coordinates return to top-left orientation; x/y are positive right/down.
+            orientedCtx.translate(0, orientedCanvas.height);
+            // Coordinates rotate so source portrait frame becomes landscape in positive destination space.
+            orientedCtx.rotate(-90 * Math.PI / 180);
+            // After transforms, drawing rect (0,0,video.videoWidth,video.videoHeight) fully covers offscreen bounds.
+            orientedCtx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+            orientedCtx.restore();
+
+            // Draw the fully-oriented intermediate frame into final canvas bounds.
+            ctx.drawImage(orientedCanvas, 0, 0, canvas.width, canvas.height);
         } else {
-            // Portrait: just mirror
+            // Portrait mirrored selfie path.
+            ctx.translate(canvas.width, 0);
+            // Coordinates now have origin at top-right; +x points left, +y points down.
             ctx.scale(-1, 1);
+            // Coordinates return to standard top-left orientation, so destination remains fully in-bounds.
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         }
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         ctx.restore();
 
         // 2. Draw Frame

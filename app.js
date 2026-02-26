@@ -166,28 +166,31 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    function drawOrientedVideoToFrame(ctx, frameRect, isLandscapeViewport) {
+    function drawOrientedVideoToFrame(ctx, frameRect) {
         const sourceWidth = video.videoWidth;
         const sourceHeight = video.videoHeight;
         if (!sourceWidth || !sourceHeight) return;
 
+        const frameAspect = frameRect.width / frameRect.height;
+        const nativeAspect = sourceWidth / sourceHeight;
+        const rotatedAspect = sourceHeight / sourceWidth;
+
+        // Prefer the orientation that best matches the frame aspect ratio.
+        // This avoids incorrect 90° rotation in landscape when the stream is already landscape.
+        const shouldRotate = Math.abs(rotatedAspect - frameAspect) < Math.abs(nativeAspect - frameAspect);
+
         const orientedCanvas = document.createElement('canvas');
         const orientedCtx = orientedCanvas.getContext('2d');
 
-        if (isLandscapeViewport) {
-            orientedCanvas.width = sourceHeight;
-            orientedCanvas.height = sourceWidth;
-            orientedCtx.translate(orientedCanvas.width / 2, orientedCanvas.height / 2);
-            orientedCtx.scale(-1, 1);
+        orientedCanvas.width = shouldRotate ? sourceHeight : sourceWidth;
+        orientedCanvas.height = shouldRotate ? sourceWidth : sourceHeight;
+
+        orientedCtx.translate(orientedCanvas.width / 2, orientedCanvas.height / 2);
+        orientedCtx.scale(-1, 1);
+        if (shouldRotate) {
             orientedCtx.rotate(-90 * Math.PI / 180);
-            orientedCtx.drawImage(video, -sourceWidth / 2, -sourceHeight / 2, sourceWidth, sourceHeight);
-        } else {
-            orientedCanvas.width = sourceWidth;
-            orientedCanvas.height = sourceHeight;
-            orientedCtx.translate(orientedCanvas.width / 2, orientedCanvas.height / 2);
-            orientedCtx.scale(-1, 1);
-            orientedCtx.drawImage(video, -sourceWidth / 2, -sourceHeight / 2, sourceWidth, sourceHeight);
         }
+        orientedCtx.drawImage(video, -sourceWidth / 2, -sourceHeight / 2, sourceWidth, sourceHeight);
 
         const scale = Math.max(frameRect.width / orientedCanvas.width, frameRect.height / orientedCanvas.height);
         const drawWidth = orientedCanvas.width * scale;
@@ -237,8 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        const isLandscapeViewport = window.innerWidth > window.innerHeight;
-        drawOrientedVideoToFrame(ctx, captureLayout.frame, isLandscapeViewport);
+        drawOrientedVideoToFrame(ctx, captureLayout.frame);
 
         // 2. Draw Frame + Decorations using geometry captured from DOM/CSS.
         ctx.fillStyle = '#573705';

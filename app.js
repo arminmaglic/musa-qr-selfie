@@ -36,6 +36,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('touchstart', initTouch);
     }, { once: true });
 
+    // Orientation change listeners
+    window.addEventListener('resize', updateCameraTransform);
+    window.addEventListener('orientationchange', updateCameraTransform);
+
     // Load assets
     const cornerImg = new Image();
     cornerImg.src = 'elements/corner.svg';
@@ -65,9 +69,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 audio: false
             });
             video.srcObject = stream;
+            updateCameraTransform();
         } catch (err) {
             console.error("Camera error:", err);
             throw err;
+        }
+    }
+
+    function updateCameraTransform() {
+        const isLandscape = window.innerWidth > window.innerHeight;
+        if (isLandscape) {
+            video.style.transform = 'scaleX(-1) rotate(-90deg)';
+        } else {
+            video.style.transform = 'scaleX(-1)';
         }
     }
 
@@ -104,10 +118,21 @@ document.addEventListener('DOMContentLoaded', () => {
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
 
-        // 1. Draw Video (Mirrored)
+        // Detect actual screen orientation
+        const isScreenLandscape = window.innerWidth > window.innerHeight;
+
+        // 1. Draw Video (Mirrored and rotated if landscape)
         ctx.save();
-        ctx.scale(-1, 1);
-        ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+        if (isScreenLandscape) {
+            // Landscape: rotate -90deg, translate, then mirror
+            ctx.translate(canvas.width, 0);
+            ctx.rotate(-90 * Math.PI / 180);
+            ctx.scale(-1, 1);
+        } else {
+            // Portrait: just mirror
+            ctx.scale(-1, 1);
+        }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         ctx.restore();
 
         // 2. Draw Frame
@@ -120,7 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Landscape: Controls on right
             paddingX = 20; // 20px left
             const paddingRight = 140; // 140px right for controls
-            paddingTop = 20;
+            paddingTop = 50; // Extra space for heading
             paddingBottom = 20;
 
             var frameX = paddingX;
@@ -130,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             // Portrait: Controls on bottom
             paddingX = 20;
-            paddingTop = 20;
+            paddingTop = 70; // Extra space for heading
             paddingBottom = 140; // 140px space at bottom
 
             var frameX = paddingX;
@@ -189,7 +214,22 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.drawImage(knjigaImg, frameX + frameW - decoSize - decoOffset, frameY + frameH - decoSize - decoOffset, decoSize, decoSize);
 
 
-        // 3. Draw Verse
+        // 3. Draw Heading
+        const headingFontSize = Math.max(18, canvas.width * 0.03);
+        ctx.font = `italic ${headingFontSize}px Georgia`;
+        ctx.fillStyle = '#d4af37';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+
+        ctx.fillText('Spomen soba Musa Ćazim Ćatić Tešanj', canvas.width / 2, 15);
+
+
+        // 4. Draw Verse
         const verse = verses[currentVerseIndex];
         if (verse) {
             const fontSize = Math.max(24, canvas.width * 0.04); // Responsive font size
@@ -212,7 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
             wrapText(ctx, `"${verse}"`, textX, textY, maxWidth, fontSize * 1.2);
         }
 
-        // 4. Download
+        // 5. Download
         const link = document.createElement('a');
         link.download = `musa-selfie-${Date.now()}.png`;
         link.href = canvas.toDataURL('image/png');

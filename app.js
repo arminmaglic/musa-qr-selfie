@@ -166,52 +166,67 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    function drawOrientedVideoToFrame(ctx, frameRect) {
+        const sourceWidth = video.videoWidth;
+        const sourceHeight = video.videoHeight;
+        if (!sourceWidth || !sourceHeight) return;
+
+        const frameAspect = frameRect.width / frameRect.height;
+        const nativeAspect = sourceWidth / sourceHeight;
+        const rotatedAspect = sourceHeight / sourceWidth;
+
+        // Prefer the orientation that best matches the frame aspect ratio.
+        // This avoids incorrect 90° rotation in landscape when the stream is already landscape.
+        const shouldRotate = Math.abs(rotatedAspect - frameAspect) < Math.abs(nativeAspect - frameAspect);
+
+        const orientedCanvas = document.createElement('canvas');
+        const orientedCtx = orientedCanvas.getContext('2d');
+
+        orientedCanvas.width = shouldRotate ? sourceHeight : sourceWidth;
+        orientedCanvas.height = shouldRotate ? sourceWidth : sourceHeight;
+
+        orientedCtx.translate(orientedCanvas.width / 2, orientedCanvas.height / 2);
+        orientedCtx.scale(-1, 1);
+        if (shouldRotate) {
+            orientedCtx.rotate(-90 * Math.PI / 180);
+        }
+        orientedCtx.drawImage(video, -sourceWidth / 2, -sourceHeight / 2, sourceWidth, sourceHeight);
+
+        const scale = Math.max(frameRect.width / orientedCanvas.width, frameRect.height / orientedCanvas.height);
+        const drawWidth = orientedCanvas.width * scale;
+        const drawHeight = orientedCanvas.height * scale;
+        const drawX = frameRect.x + ((frameRect.width - drawWidth) / 2);
+        const drawY = frameRect.y + ((frameRect.height - drawHeight) / 2);
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(frameRect.x, frameRect.y, frameRect.width, frameRect.height);
+        ctx.clip();
+        ctx.drawImage(orientedCanvas, drawX, drawY, drawWidth, drawHeight);
+        ctx.restore();
+    }
+
+    function fitFontSize(ctx, text, maxWidth, preferredSize, minSize) {
+        let fontSize = preferredSize;
+        while (fontSize > minSize) {
+            ctx.font = `italic ${fontSize}px Georgia`;
+            if (ctx.measureText(text).width <= maxWidth) {
+                break;
+            }
+            fontSize -= 1;
+        }
+        return fontSize;
+    }
+
     function takePhoto() {
         if (!video.videoWidth) return;
 
-        // Set canvas to match video resolution
+        // Set canvas to match camera resolution
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
 
-        // Detect actual screen orientation from viewport so capture logic tracks preview transform.
-        const isScreenLandscape = window.innerWidth > window.innerHeight;
-
-        // 1. Draw Video (kept in sync with updateCameraTransform)
-        ctx.save();
-        if (isScreenLandscape) {
-            // Landscape preview is `scaleX(-1) rotate(-90deg)`. We render that sequence on an
-            // offscreen surface first, then fit it into the output canvas with positive coordinates.
-            const orientedCanvas = document.createElement('canvas');
-            orientedCanvas.width = video.videoHeight;
-            orientedCanvas.height = video.videoWidth;
-            const orientedCtx = orientedCanvas.getContext('2d');
-
-            orientedCtx.save();
-            orientedCtx.translate(orientedCanvas.width, 0);
-            // Coordinates now have origin at top-right; +x moves left, +y still moves down.
-            orientedCtx.scale(-1, 1);
-            // Coordinates return to top-left orientation; x/y are positive right/down.
-            orientedCtx.translate(0, orientedCanvas.height);
-            // Coordinates rotate so source portrait frame becomes landscape in positive destination space.
-            orientedCtx.rotate(-90 * Math.PI / 180);
-            // After transforms, drawing rect (0,0,video.videoWidth,video.videoHeight) fully covers offscreen bounds.
-            orientedCtx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
-            orientedCtx.restore();
-
-            // Draw the fully-oriented intermediate frame into final canvas bounds.
-            ctx.drawImage(orientedCanvas, 0, 0, canvas.width, canvas.height);
-        } else {
-            // Portrait mirrored selfie path.
-            ctx.translate(canvas.width, 0);
-            // Coordinates now have origin at top-right; +x points left, +y points down.
-            ctx.scale(-1, 1);
-            // Coordinates return to standard top-left orientation, so destination remains fully in-bounds.
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        }
-        ctx.restore();
-
-        // 2. Draw Frame + Text using geometry captured from DOM/CSS.
+        // Read CSS-driven geometry first so capture matches on-screen layout.
         const captureLayout = computeCaptureLayoutFromDom(canvas);
         if (!captureLayout) return;
 
@@ -219,15 +234,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const frameY = captureLayout.frame.y;
         const frameW = captureLayout.frame.width;
         const frameH = captureLayout.frame.height;
+        const isLandscapeFrame = frameW > frameH;
 
-        // Draw Lines (Brown #573705)
+        // 1. Background + camera locked to frame interior.
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        drawOrientedVideoToFrame(ctx, captureLayout.frame);
+
+        // 2. Draw Frame + Decorations using geometry captured from DOM/CSS.
         ctx.fillStyle = '#573705';
         Object.values(captureLayout.lines).forEach((lineRect) => {
             if (!lineRect) return;
             ctx.fillRect(lineRect.x, lineRect.y, lineRect.width, lineRect.height);
         });
 
-        // Draw Corners
         Object.values(captureLayout.corners).forEach((cornerRect) => {
             if (!cornerRect) return;
             const centerX = cornerRect.x + cornerRect.width / 2;
@@ -240,7 +261,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.restore();
         });
 
-        // Draw Decorations
         if (captureLayout.decorations.pero) {
             const peroRect = captureLayout.decorations.pero;
             ctx.drawImage(peroImg, peroRect.x, peroRect.y, peroRect.width, peroRect.height);
@@ -250,7 +270,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.drawImage(knjigaImg, knjigaRect.x, knjigaRect.y, knjigaRect.width, knjigaRect.height);
         }
 
-
         const horizontalInset = Math.max(24, frameW * 0.08);
         const topInset = Math.max(20, frameH * 0.08);
         const bottomInset = Math.max(30, frameH * 0.1);
@@ -259,50 +278,48 @@ document.addEventListener('DOMContentLoaded', () => {
         const headingY = frameY + topInset;
         const verseBottomY = frameY + frameH - bottomInset;
 
-        // 3. Draw Heading
+        // 3. Draw Heading (slightly smaller in portrait to keep it inside frame).
         const headingRect = captureLayout.heading;
-        const headingFontSize = headingRect ? Math.max(12, headingRect.height * 0.55) : Math.max(18, canvas.width * 0.03);
-        const headingFontSize = Math.max(18, frameW * 0.03);
+        const headingText = captureLayout.headingText;
+        const headingPreferredSize = isLandscapeFrame
+            ? Math.max(18, frameH * 0.06)
+            : Math.max(14, frameH * 0.04);
+        const headingMinSize = isLandscapeFrame ? 14 : 12;
+        const headingFontSize = fitFontSize(ctx, headingText, textMaxWidth, headingPreferredSize, headingMinSize);
+
         ctx.font = `italic ${headingFontSize}px Georgia`;
         ctx.fillStyle = '#d4af37';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-
         ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
         ctx.shadowBlur = 4;
         ctx.shadowOffsetX = 2;
         ctx.shadowOffsetY = 2;
 
-        const headingX = headingRect ? headingRect.x + (headingRect.width / 2) : canvas.width / 2;
-        const headingY = headingRect ? headingRect.y : 15;
-        ctx.fillText(captureLayout.headingText, headingX, headingY);
-        ctx.fillText('Spomen soba Musa Ćazim Ćatić Tešanj', textX, headingY);
+        const headingX = headingRect ? headingRect.x + (headingRect.width / 2) : textX;
+        ctx.fillText(headingText, headingX, headingY);
 
-
-        // 4. Draw Verse
+        // 4. Draw Verse (reduce cap in landscape so text is less dominant).
         const verse = verses[currentVerseIndex];
         if (verse) {
-            const maxVerseFontSize = Math.max(22, frameW * 0.04);
-            const minVerseFontSize = 16;
+            const maxVerseFontSize = isLandscapeFrame
+                ? Math.max(14, frameW * 0.028)
+                : Math.max(18, frameW * 0.04);
+            const minVerseFontSize = isLandscapeFrame ? 12 : 14;
             let fontSize = maxVerseFontSize;
-            const maxLines = 4;
+            const maxLines = isLandscapeFrame ? 3 : 4;
 
             ctx.font = `italic ${fontSize}px Georgia`;
             ctx.fillStyle = 'white';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-
-            // Text Shadow
             ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
             ctx.shadowBlur = 4;
             ctx.shadowOffsetX = 2;
             ctx.shadowOffsetY = 2;
 
-            // Wrap text
             const verseRect = captureLayout.verse;
-            const textX = verseRect ? verseRect.x + (verseRect.width / 2) : canvas.width / 2;
-            const textY = verseRect ? verseRect.y + (verseRect.height / 2) : frameY + frameH + 40;
-            const maxWidth = verseRect ? verseRect.width : canvas.width * 0.9;
+            const verseX = verseRect ? verseRect.x + (verseRect.width / 2) : textX;
             const verseTopLimit = headingY + headingFontSize + Math.max(20, frameH * 0.06);
             const verseBottomLimit = verseBottomY;
             const verseAreaHeight = Math.max(fontSize * 1.2, verseBottomLimit - verseTopLimit);
@@ -319,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const blockHeight = wrapped.lines.length * lineHeight;
             const verseStartY = Math.max(verseTopLimit, verseBottomLimit - blockHeight);
             for (let i = 0; i < wrapped.lines.length; i++) {
-                ctx.fillText(wrapped.lines[i], textX, verseStartY + (i * lineHeight));
+                ctx.fillText(wrapped.lines[i], verseX, verseStartY + (i * lineHeight));
             }
         }
 

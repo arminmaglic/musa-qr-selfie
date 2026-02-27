@@ -9,27 +9,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentVerseIndex = 0;
 
     // ─────────────────────────────────────────────────────────────────────────
-    // OUTPUT SCALE
+    // OUTPUT RESOLUTION
     //
-    // The saved photo is rendered at VIEWPORT dimensions × OUTPUT_SCALE.
-    // This guarantees the canvas aspect ratio always matches the viewport
-    // exactly, so the DOM→canvas coordinate mapping is perfectly uniform
-    // (same scale factor on X and Y). The camera image is drawn via
-    // scale-to-fill into the frame area, so full stream resolution is still
-    // captured there regardless of this setting.
-    //
-    // 3× on a 390×844 portrait phone → 1170×2532 output (effectively 1080p+).
-    // 3× on a 390×844 landscape      → 2532×1170 output.
+    // The saved photo is rendered at this fixed size. We use the stream's own
+    // dimensions so the camera image is never upscaled. The aspect ratio of
+    // the output matches the correctly-oriented stream (portrait or landscape).
+    // All decorations/text are drawn at native canvas resolution — no viewport
+    // scaling involved, so there is no dead space from UI chrome.
     // ─────────────────────────────────────────────────────────────────────────
-    const OUTPUT_SCALE = 3;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Camera sensor rotation offset — detected once after stream loads.
-    //
-    // Android front cameras expose a raw stream that is NOT automatically
-    // rotated to match the screen. The sensor is typically mounted 90° CW
-    // from the device's natural (portrait) orientation. iOS corrects this
-    // automatically; Android does not.
+    // Android front cameras expose a landscape stream even in portrait; iOS fixes
+    // this automatically. We detect once and compute correction for every angle.
     // ─────────────────────────────────────────────────────────────────────────
     let sensorRotationCW = null;
 
@@ -45,38 +37,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click',      () => requestFullScreen(), { once: true });
     document.addEventListener('touchstart', () => requestFullScreen(), { once: true });
 
-    // ── Device angle ──────────────────────────────────────────────────────────
-    /**
-     * Returns current device rotation in degrees CW from natural (portrait).
-     * screen.orientation.angle is authoritative (0 | 90 | 180 | 270 CW).
-     * Fallback: window.orientation uses opposite sign (CCW = +), so we negate.
-     */
+    // ── Device / stream orientation ───────────────────────────────────────────
     function getDeviceAngleCW() {
-        if (screen.orientation && screen.orientation.angle != null) {
-            return screen.orientation.angle;
-        }
+        if (screen.orientation && screen.orientation.angle != null) return screen.orientation.angle;
         const wo = typeof window.orientation === 'number' ? window.orientation : 0;
         return ((wo * -1) % 360 + 360) % 360;
     }
 
-    /**
-     * How many degrees CW to rotate the raw stream to appear upright.
-     *
-     * correctionCW = (360 - sensorRotationCW - deviceAngleCW) mod 360
-     *
-     * With sensorRotationCW = 90 (typical Android front camera):
-     *   deviceAngle   0° (portrait)         → correction 270° (= -90° CCW)
-     *   deviceAngle  90° (landscape CW)     → correction 180°
-     *   deviceAngle 270° (landscape CCW)    → correction   0°
-     *   deviceAngle 180° (portrait flipped) → correction  90°
-     */
     function getStreamCorrectionCW() {
         if (!sensorRotationCW) return 0;
-        const deviceAngle = getDeviceAngleCW();
-        return ((360 - sensorRotationCW - deviceAngle) % 360 + 360) % 360;
+        return ((360 - sensorRotationCW - getDeviceAngleCW()) % 360 + 360) % 360;
     }
 
-    // ── Orientation listeners ─────────────────────────────────────────────────
     window.addEventListener('resize', updateCameraTransform);
     window.addEventListener('orientationchange', () => setTimeout(updateCameraTransform, 100));
 
@@ -99,11 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Camera ────────────────────────────────────────────────────────────────
     async function startCamera() {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: 'user',
-                width:  { ideal: 1920, min: 1280 },
-                height: { ideal: 1080, min: 720  }
-            },
+            video: { facingMode: 'user', width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 } },
             audio: false
         });
         video.srcObject = stream;
@@ -115,38 +83,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function detectSensorOffset() {
         if (sensorRotationCW !== null) return;
-        const srcW = video.videoWidth;
-        const srcH = video.videoHeight;
+        const srcW = video.videoWidth, srcH = video.videoHeight;
         if (!srcW) return;
-
         const viewIsLandscape   = window.innerWidth > window.innerHeight;
         const streamIsLandscape = srcW > srcH;
-
         sensorRotationCW = (viewIsLandscape === streamIsLandscape) ? 0 : 90;
-        console.log(`[camera] sensorRotationCW=${sensorRotationCW} | stream=${srcW}×${srcH} | device=${getDeviceAngleCW()}°`);
+        console.log(`[camera] sensorRotationCW=${sensorRotationCW} stream=${srcW}×${srcH} device=${getDeviceAngleCW()}°`);
     }
 
-    // ── Live preview transform ────────────────────────────────────────────────
+    // ── Live preview CSS transform ────────────────────────────────────────────
     function updateCameraTransform() {
         if (sensorRotationCW === null && video.videoWidth) detectSensorOffset();
-
         const corrCW = getStreamCorrectionCW();
         video.style.transformOrigin = 'center center';
-
         if (corrCW === 0) {
             video.style.transform = 'scaleX(-1)';
         } else if (corrCW === 90) {
             const cw = video.offsetWidth  || video.parentElement.offsetWidth  || window.innerWidth;
             const ch = video.offsetHeight || video.parentElement.offsetHeight || window.innerHeight;
-            const s  = (cw > 0 && ch > 0) ? cw / ch : 1;
-            video.style.transform = `rotate(90deg) scaleX(-1) scale(${s})`;
+            video.style.transform = `rotate(90deg) scaleX(-1) scale(${(cw > 0 && ch > 0) ? cw / ch : 1})`;
         } else if (corrCW === 180) {
             video.style.transform = 'scaleY(-1)';
         } else { // 270
             const cw = video.offsetWidth  || video.parentElement.offsetWidth  || window.innerWidth;
             const ch = video.offsetHeight || video.parentElement.offsetHeight || window.innerHeight;
-            const s  = (cw > 0 && ch > 0) ? ch / cw : 1;
-            video.style.transform = `rotate(-90deg) scaleX(-1) scale(${s})`;
+            video.style.transform = `rotate(-90deg) scaleX(-1) scale(${(cw > 0 && ch > 0) ? ch / cw : 1})`;
         }
     }
 
@@ -157,7 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
             verses = await response.json();
             if (verses.length > 0) displayVerse(0);
         } catch (err) {
-            console.error('Error loading verses:', err);
             verseText.innerText = 'Greška pri učitavanju stihova.';
         }
     }
@@ -171,76 +131,22 @@ document.addEventListener('DOMContentLoaded', () => {
     btnChangeVerse.addEventListener('click', () => displayVerse(currentVerseIndex + 1));
     btnCapture.addEventListener('click', takePhoto);
 
-    // ── DOM → canvas coordinate mapping ──────────────────────────────────────
-    /**
-     * Maps every visible DOM element's screen position onto the output canvas.
-     *
-     * Because canvas dimensions = viewport × OUTPUT_SCALE, scaleX === scaleY
-     * === OUTPUT_SCALE, so every element maps without distortion.
-     */
-    function computeCaptureLayoutFromDom(canvasEl) {
-        const frameOverlay   = document.getElementById('frame-overlay');
-        const heading        = document.getElementById('app-heading');
-        const verseContainer = document.getElementById('verse-container');
-        if (!frameOverlay) return null;
-
-        const vw = window.innerWidth  || document.documentElement.clientWidth  || 1;
-        const vh = window.innerHeight || document.documentElement.clientHeight || 1;
-
-        // FIX: canvas is viewport × OUTPUT_SCALE, so both axes scale identically.
-        // No more distortion regardless of viewport or stream aspect ratio.
-        const sx = canvasEl.width  / vw;  // === OUTPUT_SCALE
-        const sy = canvasEl.height / vh;  // === OUTPUT_SCALE
-
-        const mapRect = r => ({ x: r.left * sx, y: r.top * sy, width: r.width * sx, height: r.height * sy });
-        const getRect = sel => {
-            const el = typeof sel === 'string' ? frameOverlay.querySelector(sel) : sel;
-            return el ? mapRect(el.getBoundingClientRect()) : null;
-        };
-
-        return {
-            frame:       mapRect(frameOverlay.getBoundingClientRect()),
-            heading:     heading        ? mapRect(heading.getBoundingClientRect())        : null,
-            headingText: heading        ? heading.innerText : 'Spomen soba Musa Ćazim Ćatić Tešanj',
-            verse:       verseContainer ? mapRect(verseContainer.getBoundingClientRect()) : null,
-            lines:   { top: getRect('.line-top'), bottom: getRect('.line-bottom'), left: getRect('.line-left'), right: getRect('.line-right') },
-            corners: {
-                topLeft:     { ...getRect('.corner-top-left'),     angle: 0   },
-                topRight:    { ...getRect('.corner-top-right'),    angle: 90  },
-                bottomLeft:  { ...getRect('.corner-bottom-left'),  angle: -90 },
-                bottomRight: { ...getRect('.corner-bottom-right'), angle: 180 }
-            },
-            decorations: { pero: getRect('.decoration-pero'), knjiga: getRect('.decoration-knjiga') }
-        };
-    }
-
-    // ── Draw video into frame ─────────────────────────────────────────────────
-    /**
-     * Draws the raw camera stream into frameRect on ctx, applying corrCW
-     * degrees of CW rotation + selfie mirror — matching the live preview exactly.
-     *
-     * The stream is first composited into a correctly-oriented intermediate
-     * canvas, then scale-to-fill blitted into frameRect. Because the source is
-     * the full-resolution stream (up to 1920×1080), the camera image itself
-     * is still high quality regardless of OUTPUT_SCALE.
-     */
+    // ── Draw oriented video into a rect ───────────────────────────────────────
     function drawOrientedVideoToFrame(ctx, frameRect, corrCW) {
-        const srcW = video.videoWidth;
-        const srcH = video.videoHeight;
+        const srcW = video.videoWidth, srcH = video.videoHeight;
         if (!srcW || !srcH) return;
 
         const needsSwap = corrCW === 90 || corrCW === 270;
-        const oCanvas   = document.createElement('canvas');
-        oCanvas.width   = needsSwap ? srcH : srcW;
-        oCanvas.height  = needsSwap ? srcW : srcH;
+        const oCanvas = document.createElement('canvas');
+        oCanvas.width  = needsSwap ? srcH : srcW;
+        oCanvas.height = needsSwap ? srcW : srcH;
 
         const oCtx = oCanvas.getContext('2d');
         oCtx.translate(oCanvas.width / 2, oCanvas.height / 2);
-        oCtx.scale(-1, 1);                          // selfie mirror
-        if (corrCW !== 0) oCtx.rotate(-corrCW * Math.PI / 180); // CW→CCW for canvas rotate()
+        oCtx.scale(-1, 1);
+        if (corrCW !== 0) oCtx.rotate(-corrCW * Math.PI / 180);
         oCtx.drawImage(video, -srcW / 2, -srcH / 2, srcW, srcH);
 
-        // Scale-to-fill frameRect, centred, clipped
         const scale = Math.max(frameRect.width / oCanvas.width, frameRect.height / oCanvas.height);
         const drawW = oCanvas.width  * scale;
         const drawH = oCanvas.height * scale;
@@ -289,73 +195,105 @@ document.addEventListener('DOMContentLoaded', () => {
     function takePhoto() {
         if (!video.videoWidth) return;
 
-        const corrCW = getStreamCorrectionCW();
+        const corrCW    = getStreamCorrectionCW();
+        const srcW      = video.videoWidth;
+        const srcH      = video.videoHeight;
+        const needsSwap = corrCW === 90 || corrCW === 270;
 
-        // ── FIX: Canvas = viewport × OUTPUT_SCALE ────────────────────────────
-        // Previously the canvas was set to raw stream dimensions (e.g. 1920×1080),
-        // but the phone viewport has a different aspect ratio (e.g. 844×390 in
-        // landscape), causing scaleX ≠ scaleY and stretching everything.
+        // ── OUTPUT CANVAS: matches the correctly-oriented stream resolution ───
         //
-        // Now the canvas always matches the viewport aspect ratio exactly.
-        // OUTPUT_SCALE controls the final resolution (3× ≈ 1080p+ on most phones).
-        canvas.width  = Math.round(window.innerWidth  * OUTPUT_SCALE);
-        canvas.height = Math.round(window.innerHeight * OUTPUT_SCALE);
+        // The canvas is sized to the oriented stream dimensions, NOT the viewport.
+        // This means the output photo is always the full native camera resolution
+        // (e.g. 1920×1080 in landscape, 1080×1920 in portrait) with zero dead space.
+        //
+        // All layout below is computed mathematically as fractions of canvas size,
+        // completely independent of the screen layout (which has UI chrome, sidebar,
+        // etc.). This is why there is no black strip on the right — the frame and
+        // photo fill every pixel of the output canvas.
+        const outW = needsSwap ? srcH : srcW;
+        const outH = needsSwap ? srcW : srcH;
+        canvas.width  = outW;
+        canvas.height = outH;
 
-        const ctx    = canvas.getContext('2d');
-        const layout = computeCaptureLayoutFromDom(canvas);
-        if (!layout) return;
+        const ctx = canvas.getContext('2d');
 
-        const { frame: fr } = layout;
-        const isLandscapeFrame = fr.width > fr.height;
+        // ── FULL-BLEED LAYOUT ─────────────────────────────────────────────────
+        // All positions/sizes are computed as proportions of the output canvas.
+        // Nothing is copied from DOM getBoundingClientRect().
+        const MARGIN        = Math.round(outW * 0.025);   // outer black margin
+        const CORNER_SIZE   = Math.round(Math.min(outW, outH) * 0.08);
+        const LINE_THICK    = Math.max(3, Math.round(Math.min(outW, outH) * 0.003));
+        const DECO_SIZE     = Math.round(Math.min(outW, outH) * 0.07);
+
+        // Frame rect — fills almost the full canvas, leaving just a small margin
+        const fr = {
+            x:      MARGIN,
+            y:      MARGIN,
+            width:  outW - MARGIN * 2,
+            height: outH - MARGIN * 2
+        };
+
+        const isLandscape = outW > outH;
+
+        // Text insets within the frame
+        const hInset    = Math.max(24, fr.width  * 0.06);
+        const topInset  = Math.max(20, fr.height * 0.07);
+        const botInset  = Math.max(30, fr.height * 0.08);
+        const textMaxW  = fr.width - hInset * 2;
+        const headingY  = fr.y + topInset;
+        const verseBotY = fr.y + fr.height - botInset;
+        const textCX    = fr.x + fr.width / 2;   // centre X for text
 
         // 1. Black background
         ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, outW, outH);
 
-        // 2. Camera image — correctly oriented, scale-to-fill the frame area
+        // 2. Camera image, fills the entire frame
         drawOrientedVideoToFrame(ctx, fr, corrCW);
 
-        // 3. Frame lines
+        // 3. Frame border lines
         ctx.fillStyle = '#573705';
-        Object.values(layout.lines).forEach(r => { if (r) ctx.fillRect(r.x, r.y, r.width, r.height); });
+        // top
+        ctx.fillRect(fr.x + CORNER_SIZE * 0.7, fr.y, fr.width - CORNER_SIZE * 1.4, LINE_THICK);
+        // bottom
+        ctx.fillRect(fr.x + CORNER_SIZE * 0.7, fr.y + fr.height - LINE_THICK, fr.width - CORNER_SIZE * 1.4, LINE_THICK);
+        // left
+        ctx.fillRect(fr.x, fr.y + CORNER_SIZE * 0.7, LINE_THICK, fr.height - CORNER_SIZE * 1.4);
+        // right
+        ctx.fillRect(fr.x + fr.width - LINE_THICK, fr.y + CORNER_SIZE * 0.7, LINE_THICK, fr.height - CORNER_SIZE * 1.4);
 
-        // 4. Corners
-        Object.values(layout.corners).forEach(r => {
-            if (!r) return;
+        // 4. Corner ornaments
+        const corners = [
+            { x: fr.x,                  y: fr.y,                   angle: 0   },
+            { x: fr.x + fr.width,       y: fr.y,                   angle: 90  },
+            { x: fr.x,                  y: fr.y + fr.height,        angle: -90 },
+            { x: fr.x + fr.width,       y: fr.y + fr.height,        angle: 180 },
+        ];
+        corners.forEach(({ x, y, angle }) => {
             ctx.save();
-            ctx.translate(r.x + r.width / 2, r.y + r.height / 2);
-            ctx.rotate((r.angle || 0) * Math.PI / 180);
-            ctx.drawImage(cornerImg, -r.width / 2, -r.height / 2, r.width, r.height);
+            ctx.translate(x, y);
+            ctx.rotate(angle * Math.PI / 180);
+            // corner SVG is anchored top-left at angle=0
+            ctx.drawImage(cornerImg, -CORNER_SIZE * 0.1, -CORNER_SIZE * 0.1, CORNER_SIZE, CORNER_SIZE);
             ctx.restore();
         });
 
-        // 5. Decorations
-        ['pero', 'knjiga'].forEach(key => {
-            const r   = layout.decorations[key];
-            const img = key === 'pero' ? peroImg : knjigaImg;
-            if (r) ctx.drawImage(img, r.x, r.y, r.width, r.height);
-        });
-
-        // 6. Text constants
-        const hInset    = Math.max(24, fr.width  * 0.08);
-        const topInset  = Math.max(20, fr.height * 0.08);
-        const botInset  = Math.max(30, fr.height * 0.1);
-        const textX     = fr.x + fr.width / 2;
-        const textMaxW  = Math.max(120, fr.width - hInset * 2);
-        const headingY  = fr.y + topInset;
-        const verseBotY = fr.y + fr.height - botInset;
+        // 5. Decorative pero (bottom-left) and knjiga (bottom-right)
+        ctx.drawImage(peroImg,   fr.x + CORNER_SIZE * 0.1,                   fr.y + fr.height - DECO_SIZE - CORNER_SIZE * 0.1, DECO_SIZE, DECO_SIZE);
+        ctx.drawImage(knjigaImg, fr.x + fr.width - DECO_SIZE - CORNER_SIZE * 0.1, fr.y + fr.height - DECO_SIZE - CORNER_SIZE * 0.1, DECO_SIZE, DECO_SIZE);
 
         const applyShadow = () => {
-            ctx.shadowColor   = 'rgba(0,0,0,0.8)';
-            ctx.shadowBlur    = 4 * OUTPUT_SCALE;  // scale shadow with canvas
-            ctx.shadowOffsetX = 2 * OUTPUT_SCALE;
-            ctx.shadowOffsetY = 2 * OUTPUT_SCALE;
+            const blur = Math.max(4, Math.round(outH * 0.004));
+            ctx.shadowColor = 'rgba(0,0,0,0.85)';
+            ctx.shadowBlur  = blur;
+            ctx.shadowOffsetX = Math.round(blur * 0.5);
+            ctx.shadowOffsetY = Math.round(blur * 0.5);
         };
 
-        // 7. Heading
-        const headingText = layout.headingText;
-        const hPref = isLandscapeFrame ? Math.max(18, fr.height * 0.06) : Math.max(14, fr.height * 0.04);
-        const hMin  = isLandscapeFrame ? 14 : 12;
+        // 6. Heading
+        const headingText = 'Spomen soba Musa Ćazim Ćatić Tešanj';
+        const hPref = isLandscape ? Math.max(22, fr.height * 0.055) : Math.max(18, fr.height * 0.035);
+        const hMin  = isLandscape ? 16 : 14;
         const hSize = fitFontSize(ctx, headingText, textMaxW, hPref, hMin);
 
         ctx.font = `italic ${hSize}px Georgia`;
@@ -363,17 +301,16 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'top';
         applyShadow();
-        const headingX = layout.heading ? layout.heading.x + layout.heading.width / 2 : textX;
-        ctx.fillText(headingText, headingX, headingY);
+        ctx.fillText(headingText, textCX, headingY);
 
-        // 8. Verse
+        // 7. Verse
         const verse = verses[currentVerseIndex];
         if (verse) {
-            const maxFS  = isLandscapeFrame ? Math.max(14, fr.width * 0.028) : Math.max(18, fr.width * 0.04);
-            const minFS  = isLandscapeFrame ? 12 : 14;
-            const maxLns = isLandscapeFrame ? 3 : 4;
+            const maxFS  = isLandscape ? Math.max(18, fr.width * 0.025) : Math.max(22, fr.width * 0.038);
+            const minFS  = isLandscape ? 14 : 16;
+            const maxLns = isLandscape ? 3 : 4;
             let   fs     = maxFS;
-            let   lh     = fs * 1.2;
+            let   lh     = fs * 1.35;
 
             ctx.font = `italic ${fs}px Georgia`;
             ctx.fillStyle    = 'white';
@@ -381,23 +318,22 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.textBaseline = 'top';
             applyShadow();
 
-            const verseX  = layout.verse ? layout.verse.x + layout.verse.width / 2 : textX;
-            const vTopLim = headingY + hSize + Math.max(20, fr.height * 0.06);
-            const vAreaH  = Math.max(fs * 1.2, verseBotY - vTopLim);
+            const vTopLim = headingY + hSize + Math.max(24, fr.height * 0.05);
+            const vAreaH  = Math.max(fs * 1.35, verseBotY - vTopLim);
             let wrapped   = wrapText(ctx, `"${verse}"`, textMaxW, lh, maxLns);
 
             while ((wrapped.truncated || wrapped.lines.length * lh > vAreaH) && fs > minFS) {
-                fs--; lh = fs * 1.2;
+                fs--; lh = fs * 1.35;
                 ctx.font = `italic ${fs}px Georgia`;
                 wrapped  = wrapText(ctx, `"${verse}"`, textMaxW, lh, maxLns);
             }
 
             const blockH = wrapped.lines.length * lh;
             const startY = Math.max(vTopLim, verseBotY - blockH);
-            wrapped.lines.forEach((ln, i) => ctx.fillText(ln, verseX, startY + i * lh));
+            wrapped.lines.forEach((ln, i) => ctx.fillText(ln, textCX, startY + i * lh));
         }
 
-        // 9. Download
+        // 8. Download
         const link    = document.createElement('a');
         link.download = `musa-selfie-${Date.now()}.png`;
         link.href     = canvas.toDataURL('image/png');

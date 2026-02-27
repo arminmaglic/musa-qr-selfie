@@ -9,21 +9,29 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentVerseIndex = 0;
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Camera sensor rotation offset.
+    // OUTPUT SCALE
+    //
+    // The saved photo is rendered at VIEWPORT dimensions × OUTPUT_SCALE.
+    // This guarantees the canvas aspect ratio always matches the viewport
+    // exactly, so the DOM→canvas coordinate mapping is perfectly uniform
+    // (same scale factor on X and Y). The camera image is drawn via
+    // scale-to-fill into the frame area, so full stream resolution is still
+    // captured there regardless of this setting.
+    //
+    // 3× on a 390×844 portrait phone → 1170×2532 output (effectively 1080p+).
+    // 3× on a 390×844 landscape      → 2532×1170 output.
+    // ─────────────────────────────────────────────────────────────────────────
+    const OUTPUT_SCALE = 3;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Camera sensor rotation offset — detected once after stream loads.
     //
     // Android front cameras expose a raw stream that is NOT automatically
-    // rotated to match the screen. The sensor is physically mounted at a fixed
-    // angle — typically 90° CW from the device's natural (portrait) orientation.
-    // iOS browsers correct this automatically; Android browsers do not.
-    //
-    // We detect the offset once after stream metadata loads:
-    //   - Stream is landscape while viewport is portrait → sensorRotationCW = 90
-    //   - Stream matches viewport → sensorRotationCW = 0  (iOS / desktop)
-    //
-    // We then combine that with the live device rotation angle (screen.orientation)
-    // to compute the exact correction needed in any orientation.
+    // rotated to match the screen. The sensor is typically mounted 90° CW
+    // from the device's natural (portrait) orientation. iOS corrects this
+    // automatically; Android does not.
     // ─────────────────────────────────────────────────────────────────────────
-    let sensorRotationCW = null; // null = not yet detected
+    let sensorRotationCW = null;
 
     init();
 
@@ -37,22 +45,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click',      () => requestFullScreen(), { once: true });
     document.addEventListener('touchstart', () => requestFullScreen(), { once: true });
 
-    // ── Orientation helpers ───────────────────────────────────────────────────
-
+    // ── Device angle ──────────────────────────────────────────────────────────
     /**
-     * Returns the current device rotation in degrees CW from its natural
-     * (portrait) orientation.
-     *
-     * screen.orientation.angle is the authoritative source per W3C spec:
-     * "the angle of the current screen orientation relative to the default
-     * screen orientation, expressed as degrees going clockwise."
-     *   0   → portrait (natural)
-     *   90  → landscape, device rotated 90° CW  (top points right)
-     *   180 → portrait, upside-down
-     *   270 → landscape, device rotated 90° CCW (top points left)
-     *
-     * Fallback: window.orientation uses the OPPOSITE sign convention (CCW = +)
-     * so we negate it to convert to CW.
+     * Returns current device rotation in degrees CW from natural (portrait).
+     * screen.orientation.angle is authoritative (0 | 90 | 180 | 270 CW).
+     * Fallback: window.orientation uses opposite sign (CCW = +), so we negate.
      */
     function getDeviceAngleCW() {
         if (screen.orientation && screen.orientation.angle != null) {
@@ -63,17 +60,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * How many degrees CW must the raw stream be rotated so it appears upright?
+     * How many degrees CW to rotate the raw stream to appear upright.
      *
-     * The camera sensor is fixed at sensorRotationCW degrees CW from "natural up".
-     * When the device is rotated deviceAngleCW degrees CW, the correction is:
+     * correctionCW = (360 - sensorRotationCW - deviceAngleCW) mod 360
      *
-     *   correctionCW = (360 - sensorRotationCW - deviceAngleCW) mod 360
-     *
-     * Examples with sensorRotationCW = 90 (typical Android front camera):
-     *   deviceAngle   0° (portrait)         → correction 270° (= -90° CCW) ✓
+     * With sensorRotationCW = 90 (typical Android front camera):
+     *   deviceAngle   0° (portrait)         → correction 270° (= -90° CCW)
      *   deviceAngle  90° (landscape CW)     → correction 180°
-     *   deviceAngle 270° (landscape CCW)    → correction   0° (no rotation needed)
+     *   deviceAngle 270° (landscape CCW)    → correction   0°
      *   deviceAngle 180° (portrait flipped) → correction  90°
      */
     function getStreamCorrectionCW() {
@@ -82,12 +76,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return ((360 - sensorRotationCW - deviceAngle) % 360 + 360) % 360;
     }
 
-    // ── Orientation change listeners ──────────────────────────────────────────
+    // ── Orientation listeners ─────────────────────────────────────────────────
     window.addEventListener('resize', updateCameraTransform);
-    window.addEventListener('orientationchange', () => {
-        // Small delay — some browsers fire before screen.orientation.angle updates
-        setTimeout(updateCameraTransform, 100);
-    });
+    window.addEventListener('orientationchange', () => setTimeout(updateCameraTransform, 100));
 
     // ── Asset preloads ────────────────────────────────────────────────────────
     const cornerImg  = new Image(); cornerImg.src  = 'elements/corner.svg';
@@ -116,24 +107,14 @@ document.addEventListener('DOMContentLoaded', () => {
             audio: false
         });
         video.srcObject = stream;
-
-        // Wait for real dimensions — videoWidth/Height are 0 until loadedmetadata.
         video.addEventListener('loadedmetadata', () => {
             detectSensorOffset();
             updateCameraTransform();
         }, { once: true });
     }
 
-    /**
-     * Detect the camera sensor's fixed CW rotation offset relative to the
-     * device's natural (portrait) orientation. Called once after stream loads.
-     *
-     * We account for the current device angle so detection works even if the
-     * user has already rotated to landscape before opening the app.
-     */
     function detectSensorOffset() {
-        if (sensorRotationCW !== null) return; // already detected
-
+        if (sensorRotationCW !== null) return;
         const srcW = video.videoWidth;
         const srcH = video.videoHeight;
         if (!srcW) return;
@@ -141,16 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const viewIsLandscape   = window.innerWidth > window.innerHeight;
         const streamIsLandscape = srcW > srcH;
 
-        if (viewIsLandscape === streamIsLandscape) {
-            // Both match → stream is already correctly oriented (iOS / desktop)
-            sensorRotationCW = 0;
-        } else {
-            // Mismatch → Android-style 90° sensor offset
-            sensorRotationCW = 90;
-        }
-
-        console.log(`[camera] sensor offset: ${sensorRotationCW}° CW | ` +
-                    `stream: ${srcW}×${srcH} | device: ${getDeviceAngleCW()}°`);
+        sensorRotationCW = (viewIsLandscape === streamIsLandscape) ? 0 : 90;
+        console.log(`[camera] sensorRotationCW=${sensorRotationCW} | stream=${srcW}×${srcH} | device=${getDeviceAngleCW()}°`);
     }
 
     // ── Live preview transform ────────────────────────────────────────────────
@@ -161,24 +134,15 @@ document.addEventListener('DOMContentLoaded', () => {
         video.style.transformOrigin = 'center center';
 
         if (corrCW === 0) {
-            // No rotation needed — just selfie mirror
             video.style.transform = 'scaleX(-1)';
-
         } else if (corrCW === 90) {
-            // 90° CW + mirror. After the rotation width/height are swapped,
-            // so scale by (containerW / containerH) to cover the container.
             const cw = video.offsetWidth  || video.parentElement.offsetWidth  || window.innerWidth;
             const ch = video.offsetHeight || video.parentElement.offsetHeight || window.innerHeight;
             const s  = (cw > 0 && ch > 0) ? cw / ch : 1;
             video.style.transform = `rotate(90deg) scaleX(-1) scale(${s})`;
-
         } else if (corrCW === 180) {
-            // 180° = just flip vertically (mirror + vertical flip = scaleY(-1))
             video.style.transform = 'scaleY(-1)';
-
-        } else {
-            // 270° CW = -90° CCW. This is the common Android portrait case.
-            // Scale by (containerH / containerW) to cover the portrait container.
+        } else { // 270
             const cw = video.offsetWidth  || video.parentElement.offsetWidth  || window.innerWidth;
             const ch = video.offsetHeight || video.parentElement.offsetHeight || window.innerHeight;
             const s  = (cw > 0 && ch > 0) ? ch / cw : 1;
@@ -208,6 +172,12 @@ document.addEventListener('DOMContentLoaded', () => {
     btnCapture.addEventListener('click', takePhoto);
 
     // ── DOM → canvas coordinate mapping ──────────────────────────────────────
+    /**
+     * Maps every visible DOM element's screen position onto the output canvas.
+     *
+     * Because canvas dimensions = viewport × OUTPUT_SCALE, scaleX === scaleY
+     * === OUTPUT_SCALE, so every element maps without distortion.
+     */
     function computeCaptureLayoutFromDom(canvasEl) {
         const frameOverlay   = document.getElementById('frame-overlay');
         const heading        = document.getElementById('app-heading');
@@ -216,8 +186,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const vw = window.innerWidth  || document.documentElement.clientWidth  || 1;
         const vh = window.innerHeight || document.documentElement.clientHeight || 1;
-        const sx = canvasEl.width  / vw;
-        const sy = canvasEl.height / vh;
+
+        // FIX: canvas is viewport × OUTPUT_SCALE, so both axes scale identically.
+        // No more distortion regardless of viewport or stream aspect ratio.
+        const sx = canvasEl.width  / vw;  // === OUTPUT_SCALE
+        const sy = canvasEl.height / vh;  // === OUTPUT_SCALE
 
         const mapRect = r => ({ x: r.left * sx, y: r.top * sy, width: r.width * sx, height: r.height * sy });
         const getRect = sel => {
@@ -243,32 +216,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Draw video into frame ─────────────────────────────────────────────────
     /**
-     * Renders the raw camera stream into frameRect on ctx, applying corrCW
-     * degrees of CW rotation plus a selfie mirror — exactly matching what
-     * the user sees in the live preview.
+     * Draws the raw camera stream into frameRect on ctx, applying corrCW
+     * degrees of CW rotation + selfie mirror — matching the live preview exactly.
+     *
+     * The stream is first composited into a correctly-oriented intermediate
+     * canvas, then scale-to-fill blitted into frameRect. Because the source is
+     * the full-resolution stream (up to 1920×1080), the camera image itself
+     * is still high quality regardless of OUTPUT_SCALE.
      */
     function drawOrientedVideoToFrame(ctx, frameRect, corrCW) {
         const srcW = video.videoWidth;
         const srcH = video.videoHeight;
         if (!srcW || !srcH) return;
 
-        // The intermediate canvas has the correctly-oriented dimensions.
-        // A 90° or 270° correction swaps width and height.
         const needsSwap = corrCW === 90 || corrCW === 270;
-        const oCanvas = document.createElement('canvas');
-        oCanvas.width  = needsSwap ? srcH : srcW;
-        oCanvas.height = needsSwap ? srcW : srcH;
+        const oCanvas   = document.createElement('canvas');
+        oCanvas.width   = needsSwap ? srcH : srcW;
+        oCanvas.height  = needsSwap ? srcW : srcH;
 
         const oCtx = oCanvas.getContext('2d');
         oCtx.translate(oCanvas.width / 2, oCanvas.height / 2);
-        oCtx.scale(-1, 1);                                   // selfie mirror first
-        if (corrCW !== 0) {
-            // rotate() takes CCW radians; corrCW is CW degrees, so negate.
-            oCtx.rotate(-corrCW * Math.PI / 180);
-        }
+        oCtx.scale(-1, 1);                          // selfie mirror
+        if (corrCW !== 0) oCtx.rotate(-corrCW * Math.PI / 180); // CW→CCW for canvas rotate()
         oCtx.drawImage(video, -srcW / 2, -srcH / 2, srcW, srcH);
 
-        // Scale-to-fill frameRect, centred, clipped to frame bounds
+        // Scale-to-fill frameRect, centred, clipped
         const scale = Math.max(frameRect.width / oCanvas.width, frameRect.height / oCanvas.height);
         const drawW = oCanvas.width  * scale;
         const drawH = oCanvas.height * scale;
@@ -289,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
         while (size > minSize) {
             ctx.font = `italic ${size}px Georgia`;
             if (ctx.measureText(text).width <= maxWidth) break;
-            size -= 1;
+            size--;
         }
         return size;
     }
@@ -317,18 +289,17 @@ document.addEventListener('DOMContentLoaded', () => {
     function takePhoto() {
         if (!video.videoWidth) return;
 
-        const corrCW    = getStreamCorrectionCW();
-        const srcW      = video.videoWidth;
-        const srcH      = video.videoHeight;
-        const needsSwap = corrCW === 90 || corrCW === 270;
+        const corrCW = getStreamCorrectionCW();
 
-        // Canvas dimensions must match the VISUAL output orientation.
-        // If the correction swaps dimensions (90° or 270°), swap the canvas too
-        // so the DOM→canvas scale factors are uniform and the frame isn't distorted.
-        //   e.g. raw 1920×1080 + 270° correction → portrait canvas 1080×1920
-        //   e.g. raw 1920×1080 + 0° correction   → landscape canvas 1920×1080
-        canvas.width  = needsSwap ? srcH : srcW;
-        canvas.height = needsSwap ? srcW : srcH;
+        // ── FIX: Canvas = viewport × OUTPUT_SCALE ────────────────────────────
+        // Previously the canvas was set to raw stream dimensions (e.g. 1920×1080),
+        // but the phone viewport has a different aspect ratio (e.g. 844×390 in
+        // landscape), causing scaleX ≠ scaleY and stretching everything.
+        //
+        // Now the canvas always matches the viewport aspect ratio exactly.
+        // OUTPUT_SCALE controls the final resolution (3× ≈ 1080p+ on most phones).
+        canvas.width  = Math.round(window.innerWidth  * OUTPUT_SCALE);
+        canvas.height = Math.round(window.innerHeight * OUTPUT_SCALE);
 
         const ctx    = canvas.getContext('2d');
         const layout = computeCaptureLayoutFromDom(canvas);
@@ -341,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // 2. Camera image — correctly oriented and clipped to frame
+        // 2. Camera image — correctly oriented, scale-to-fill the frame area
         drawOrientedVideoToFrame(ctx, fr, corrCW);
 
         // 3. Frame lines
@@ -365,20 +336,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if (r) ctx.drawImage(img, r.x, r.y, r.width, r.height);
         });
 
-        // 6. Text setup
-        const hInset   = Math.max(24, fr.width  * 0.08);
-        const topInset = Math.max(20, fr.height * 0.08);
-        const botInset = Math.max(30, fr.height * 0.1);
-        const textX    = fr.x + fr.width / 2;
-        const textMaxW = Math.max(120, fr.width - hInset * 2);
-        const headingY = fr.y + topInset;
+        // 6. Text constants
+        const hInset    = Math.max(24, fr.width  * 0.08);
+        const topInset  = Math.max(20, fr.height * 0.08);
+        const botInset  = Math.max(30, fr.height * 0.1);
+        const textX     = fr.x + fr.width / 2;
+        const textMaxW  = Math.max(120, fr.width - hInset * 2);
+        const headingY  = fr.y + topInset;
         const verseBotY = fr.y + fr.height - botInset;
 
         const applyShadow = () => {
-            ctx.shadowColor = 'rgba(0,0,0,0.8)';
-            ctx.shadowBlur  = 4;
-            ctx.shadowOffsetX = 2;
-            ctx.shadowOffsetY = 2;
+            ctx.shadowColor   = 'rgba(0,0,0,0.8)';
+            ctx.shadowBlur    = 4 * OUTPUT_SCALE;  // scale shadow with canvas
+            ctx.shadowOffsetX = 2 * OUTPUT_SCALE;
+            ctx.shadowOffsetY = 2 * OUTPUT_SCALE;
         };
 
         // 7. Heading

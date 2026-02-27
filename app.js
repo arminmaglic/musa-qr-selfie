@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('touchstart', initTouch);
     }, { once: true });
 
-    // Orientation change listeners
+    // Orientation change listeners — re-evaluate transform when device rotates
     window.addEventListener('resize', updateCameraTransform);
     window.addEventListener('orientationchange', updateCameraTransform);
 
@@ -69,7 +69,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 audio: false
             });
             video.srcObject = stream;
-            updateCameraTransform();
+
+            // FIX: Wait for stream dimensions to be known before applying transforms.
+            // On Android, videoWidth/videoHeight are 0 until loadedmetadata fires.
+            // Calling updateCameraTransform() too early means we cannot detect the
+            // landscape-stream-in-portrait case, so the preview appears rotated 90°.
+            video.addEventListener('loadedmetadata', updateCameraTransform, { once: true });
         } catch (err) {
             console.error("Camera error:", err);
             throw err;
@@ -77,10 +82,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateCameraTransform() {
-        const isLandscape = window.innerWidth > window.innerHeight;
-        if (isLandscape) {
+        const isLandscapeViewport = window.innerWidth > window.innerHeight;
+        const streamW = video.videoWidth;
+        const streamH = video.videoHeight;
+
+        // FIX: Android front cameras deliver a landscape-oriented stream (e.g. 1280×720)
+        // even when the phone is held in portrait. iOS corrects this automatically;
+        // Android does not. Detect the mismatch by comparing stream vs viewport orientation.
+        const streamIsLandscape = streamW > 0 && streamW > streamH;
+        const androidPortraitMismatch = !isLandscapeViewport && streamIsLandscape;
+
+        video.style.transformOrigin = 'center center';
+
+        if (androidPortraitMismatch) {
+            // Portrait viewport + landscape stream → raw stream is rotated 90° CW.
+            // Counter-rotate 90° CCW, then mirror for selfie.
+            // After the rotation the video's natural dimensions are swapped, so scale by
+            // (containerH / containerW) to make the rotated image cover the portrait box.
+            const containerW = video.offsetWidth || video.parentElement.offsetWidth || window.innerWidth;
+            const containerH = video.offsetHeight || video.parentElement.offsetHeight || window.innerHeight;
+            const scale = containerH > 0 && containerW > 0 ? containerH / containerW : 1;
+            video.style.transform = `rotate(-90deg) scaleX(-1) scale(${scale})`;
+        } else if (isLandscapeViewport && !streamIsLandscape) {
+            // Landscape viewport + portrait stream (uncommon): rotate 90° and mirror.
             video.style.transform = 'rotate(90deg) scaleX(-1)';
         } else {
+            // Stream and viewport orientations match (iOS, desktop): just mirror.
             video.style.transform = 'scaleX(-1)';
         }
     }

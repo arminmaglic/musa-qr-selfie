@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateCameraTransform() {
         const isLandscape = window.innerWidth > window.innerHeight;
         if (isLandscape) {
-            video.style.transform = 'rotate(-90deg) scaleX(-1)';
+            video.style.transform = 'rotate(90deg) scaleX(-1)';
         } else {
             video.style.transform = 'scaleX(-1)';
         }

@@ -249,18 +249,18 @@ body {
     }
 
     #frame-overlay {
-        top: 30px;
-        left: 20px;
-        right: 140px;
-        bottom: 20px;
+        top: 40px;
+        left: 40px;
+        right: 180px;
+        bottom: 40px;
     }
 
     #verse-container {
-        bottom: 40px;
-        left: 40px;
-        right: 160px;
+        bottom: 48px;
+        left: 72px;
+        right: 212px;
         width: auto;
-        max-width: calc(100% - 200px);
+        max-width: calc(100% - 284px);
     }
 
     #controls {

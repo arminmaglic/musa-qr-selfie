@@ -8,6 +8,39 @@ document.addEventListener('DOMContentLoaded', () => {
     let verses = [];
     let currentVerseIndex = 0;
 
+    // ── In-app browser detection ──────────────────────────────────────────────
+    function isInAppBrowser() {
+        const ua = navigator.userAgent || '';
+        return /FBAN|FBAV|FB_IAB|Instagram|Messenger|KAKAOTALK|Line\/|WhatsApp|Snapchat/i.test(ua)
+            || (typeof navigator.standalone === 'undefined' && /wv|WebView/i.test(ua));
+    }
+
+    if (isInAppBrowser()) {
+        document.body.innerHTML = `
+            <div style="
+                display:flex; flex-direction:column; align-items:center; justify-content:center;
+                height:100vh; background:#000; color:#d4af37; font-family:Georgia,serif;
+                text-align:center; padding:30px; gap:20px;
+            ">
+                <div style="font-size:3rem;">📷</div>
+                <h2 style="font-size:1.3rem; font-style:italic;">Spomen soba Musa Ćazim Ćatić Tešanj</h2>
+                <p style="color:#fff; font-size:1rem; line-height:1.6;">
+                    Ova aplikacija zahtijeva pristup kameri.<br>
+                    Molimo otvorite link u <strong>Chrome</strong> ili <strong>Safari</strong> browseru.
+                </p>
+                <p style="color:#aaa; font-size:0.85rem;">
+                    Pritisnite ··· ili ↗ u gornjem uglu i odaberite<br>
+                    <em>"Otvori u browseru"</em>
+                </p>
+                <button onclick="window.location.href=window.location.href" style="
+                    margin-top:10px; padding:12px 28px; background:#d4af37; color:#000;
+                    border:none; border-radius:25px; font-size:1rem; font-family:Georgia,serif;
+                    cursor:pointer;
+                ">Pokušaj ipak otvoriti</button>
+            </div>`;
+        return;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // OUTPUT RESOLUTION
     //
@@ -70,15 +103,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── Camera ────────────────────────────────────────────────────────────────
     async function startCamera() {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 } },
-            audio: false
-        });
-        video.srcObject = stream;
-        video.addEventListener('loadedmetadata', () => {
-            detectSensorOffset();
-            updateCameraTransform();
-        }, { once: true });
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 } },
+                audio: false
+            });
+            video.srcObject = stream;
+            video.addEventListener('loadedmetadata', () => {
+                detectSensorOffset();
+                updateCameraTransform();
+            }, { once: true });
+        } catch (error) {
+            let msg = 'Molimo dopustite pristup kameri.';
+            if (error.name === 'NotAllowedError') {
+                msg = 'Pristup kameri je odbijen. Provjerite dozvole u postavkama browsera.';
+            } else if (error.name === 'NotFoundError') {
+                msg = 'Kamera nije pronađena na ovom uređaju.';
+            } else if (error.name === 'NotSupportedError' || location.protocol !== 'https:') {
+                msg = 'Aplikacija zahtijeva HTTPS vezu. Provjerite da URL počinje sa https://';
+            }
+            alert(msg);
+            throw error;
+        }
     }
 
     function detectSensorOffset() {

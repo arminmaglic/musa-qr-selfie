@@ -4,9 +4,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const verseText = document.getElementById('verse-text');
     const btnCapture = document.getElementById('btn-capture');
     const btnChangeVerse = document.getElementById('btn-change-verse');
+    const btnSwitchCamera = document.getElementById('btn-switch-camera');
 
     let verses = [];
     let currentVerseIndex = 0;
+    let currentFacingMode = 'user';
 
     // ── In-app browser detection ──────────────────────────────────────────────
     function isInAppBrowser() {
@@ -104,12 +106,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Camera ────────────────────────────────────────────────────────────────
     async function startCamera() {
         try {
+            if (video.srcObject) stopCurrentStream();
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: 'user', width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 } },
+                video: {
+                    facingMode: { ideal: currentFacingMode },
+                    width: { ideal: 1920, min: 1280 },
+                    height: { ideal: 1080, min: 720 }
+                },
                 audio: false
             });
             video.srcObject = stream;
+            const trackSettings = stream.getVideoTracks()[0]?.getSettings?.();
+            if (trackSettings?.facingMode === 'environment' || trackSettings?.facingMode === 'user') {
+                currentFacingMode = trackSettings.facingMode;
+            }
+            updateSwitchCameraLabel();
             video.addEventListener('loadedmetadata', () => {
+                sensorRotationCW = null;
                 detectSensorOffset();
                 updateCameraTransform();
             }, { once: true });
@@ -124,6 +137,32 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             alert(msg);
             throw error;
+        }
+    }
+
+    function stopCurrentStream() {
+        const stream = video.srcObject;
+        if (!stream) return;
+        stream.getTracks().forEach((track) => track.stop());
+        video.srcObject = null;
+    }
+
+    function updateSwitchCameraLabel() {
+        const isRear = currentFacingMode === 'environment';
+        btnSwitchCamera.textContent = isRear ? '🤳' : '📷';
+        btnSwitchCamera.setAttribute(
+            'aria-label',
+            isRear ? 'Prebaci na prednju kameru' : 'Prebaci na zadnju kameru'
+        );
+    }
+
+    async function switchCamera() {
+        currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+        try {
+            await startCamera();
+        } catch (error) {
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            await startCamera();
         }
     }
 
@@ -175,6 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     btnChangeVerse.addEventListener('click', () => displayVerse(currentVerseIndex + 1));
+    btnSwitchCamera.addEventListener('click', switchCamera);
     btnCapture.addEventListener('click', takePhoto);
 
     // ── Draw oriented video into a rect ───────────────────────────────────────

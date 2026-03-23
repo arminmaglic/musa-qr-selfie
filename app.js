@@ -84,6 +84,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return ((360 - sensorRotationCW - getDeviceAngleCW()) % 360 + 360) % 360;
     }
 
+    function shouldMirrorFeed() {
+        return currentFacingMode === 'user';
+    }
+
     window.addEventListener('resize', updateCameraTransform);
     window.addEventListener('orientationchange', () => setTimeout(updateCameraTransform, 100));
 
@@ -180,19 +184,21 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateCameraTransform() {
         if (sensorRotationCW === null && video.videoWidth) detectSensorOffset();
         const corrCW = getStreamCorrectionCW();
+        const mirror = shouldMirrorFeed();
+        const mirrorScale = mirror ? 'scaleX(-1)' : '';
         video.style.transformOrigin = 'center center';
         if (corrCW === 0) {
-            video.style.transform = 'scaleX(-1)';
+            video.style.transform = mirror ? 'scaleX(-1)' : 'none';
         } else if (corrCW === 90) {
             const cw = video.offsetWidth  || video.parentElement.offsetWidth  || window.innerWidth;
             const ch = video.offsetHeight || video.parentElement.offsetHeight || window.innerHeight;
-            video.style.transform = `rotate(90deg) scaleX(-1) scale(${(cw > 0 && ch > 0) ? cw / ch : 1})`;
+            video.style.transform = `rotate(90deg) ${mirrorScale} scale(${(cw > 0 && ch > 0) ? cw / ch : 1})`.trim();
         } else if (corrCW === 180) {
-            video.style.transform = 'scaleY(-1)';
+            video.style.transform = mirror ? 'scaleY(-1)' : 'rotate(180deg)';
         } else { // 270
             const cw = video.offsetWidth  || video.parentElement.offsetWidth  || window.innerWidth;
             const ch = video.offsetHeight || video.parentElement.offsetHeight || window.innerHeight;
-            video.style.transform = `rotate(-90deg) scaleX(-1) scale(${(cw > 0 && ch > 0) ? ch / cw : 1})`;
+            video.style.transform = `rotate(-90deg) ${mirrorScale} scale(${(cw > 0 && ch > 0) ? ch / cw : 1})`.trim();
         }
     }
 
@@ -229,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const oCtx = oCanvas.getContext('2d');
         oCtx.translate(oCanvas.width / 2, oCanvas.height / 2);
-        oCtx.scale(-1, 1);
+        if (shouldMirrorFeed()) oCtx.scale(-1, 1);
         if (corrCW !== 0) oCtx.rotate(-corrCW * Math.PI / 180);
         oCtx.drawImage(video, -srcW / 2, -srcH / 2, srcW, srcH);
 
